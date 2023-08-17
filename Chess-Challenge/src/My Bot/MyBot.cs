@@ -34,10 +34,10 @@ public class MyBot : IChessBot
      * +1 = white winning overwhelmingly
      * -1 = black winning overwhelmingly
      */
-    float[] PieceValues = { 0f, 0.125f, 0.25f, 0.375f, 0.625f, 0.75f, 1f };
-    private Tinn neuralnet;
-    private const int NumInputs = 73;
-    private const int NumHiddenNeurons = 1024;
+    public static float[] PieceValues = { 0f, 0.125f, 0.25f, 0.375f, 0.625f, 0.75f, 1f };
+    public Tinn neuralnet;
+    public static int NumInputs = 73;
+    public static int NumHiddenNeurons = 1024;
 
     public MyBot()
     {
@@ -46,7 +46,7 @@ public class MyBot : IChessBot
         
     }
 
-    private float[] getInputs(Board board)
+    public static float[] getInputs(Board board)
     { 
         List<float> inputs = new();
 
@@ -70,7 +70,7 @@ public class MyBot : IChessBot
         return inputs.ToArray();
     }
 
-    private float[] SquareCoordinates(Square square)
+    public static float[] SquareCoordinates(Square square)
     {
         return new float[2] { square.File / 7.0f, square.Rank / 7.0f };
     }
