@@ -7,9 +7,12 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <StartupObject>Chess_Challenge.src.My_Bot.BotTrainer</StartupObject>
+    <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="30.0.1" />
     <PackageReference Include="Raylib-cs" Version="4.5.0.2" />
   </ItemGroup>
 
