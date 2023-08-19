@@ -19,23 +19,72 @@ namespace Chess_Challenge.src.My_Bot
         public string Evaluation { get; set; }
     }
 
-    static class BotTrainer
+    public class BotTrainer
     {
         const string trainingPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\chessData.csv";
+        public const string modelPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\models\\savedmodel.tinn";
+
         private static string[,] fenEvalArray;
         private static Random random = new Random();
         public static void Main(string[] args)
         {
-            Console.WriteLine("Yo this worked pog");
-            MyBot bot = new MyBot();
-            LoadCSVToArray(trainingPath);
-            var randomPair = GetRandomFENEvalPair();
-            Console.WriteLine($"Random FEN: {randomPair.Item1}, Eval: {randomPair.Item2}");
-            Console.WriteLine(evalStr_to_float(randomPair.Item2));
+/*            Tinn neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
+
+            TrainNetwork(neuralNet, trainingPath, 1f, 512, 0.999f, 10000);
+            Console.WriteLine("Saving model");
+            neuralNet.Save(modelPath);*/
+
+            TestModel(10, modelPath, trainingPath);
             Console.WriteLine("Press anything");
             Console.ReadKey();
         }
 
+        public static void TrainNetwork(Tinn network, string datasetPath = trainingPath, float rate = 1.0f, int iterations = 512, float anneal = 0.99f, int batch = 10000)
+        {
+            // Hyper Parameters.
+            // Learning rate is annealed and thus not constant.
+            // It can be fine tuned along with the number of hidden layers.
+            // Feel free to modify the anneal rate.
+            // The number of iterations can be changed for stronger training.
+
+            LoadCSVToArray(datasetPath);
+
+            for (int i = 0; i < iterations; i++)
+            {
+                float error = 0.0f;
+                for (int j = 0; j < batch; j++)
+                {
+                    (string, string) currPair = GetRandomFENEvalPair();
+                    float[] input = MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(currPair.Item1));
+                    float[] target = { evalStr_to_float(currPair.Item2) };
+                    error += network.Train(input, target, rate);
+                }
+                Console.WriteLine($"{i}/{iterations}: error {(double)error / batch} :: learning rate {(double)rate}");
+                rate *= anneal;
+            }
+        }
+        public static void TestModel(int numTests = 10, string testModelPath = modelPath, string testDataPath = trainingPath)
+        {
+            Console.WriteLine("Loading model...");
+            Tinn testNet = Tinn.Load(testModelPath);
+
+            Console.WriteLine("Loading dataset...");
+            LoadCSVToArray(testDataPath);
+            for (int i = 0;i < numTests; i++)
+            {
+                var randomPair = GetRandomFENEvalPair();
+                ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
+                float[] testinput = MyBot.getInputs(board);
+                float testtarget = evalStr_to_float(randomPair.Item2);
+                float prediction = testNet.Predict(testinput)[0];
+
+                Console.Write(board.CreateDiagram(true, false));
+                Console.WriteLine($"Random FEN: {randomPair.Item1}, Eval: {randomPair.Item2}");
+                Console.WriteLine($"Target Eval: {testtarget}");
+                Console.WriteLine($"Bot's Eval: {prediction}");
+                Console.WriteLine();
+            }
+        }
         public static void LoadCSVToArray(string path)
         {
             var records = new List<FenEvaluation>();
@@ -60,7 +109,7 @@ namespace Chess_Challenge.src.My_Bot
             return (fenEvalArray[randomIndex, 0], fenEvalArray[randomIndex, 1]);
         }
 
-        public static float evalStr_to_float(string evalStr, int alpha = 300)
+        public static float evalStr_to_float(string evalStr, float alpha = 300)
         {
             if (evalStr.StartsWith("#-"))
             {

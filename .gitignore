@@ -397,3 +397,4 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 /Chess-Challenge/src/My Bot/training
+/Chess-Challenge/src/My Bot/models

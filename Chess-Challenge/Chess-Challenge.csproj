@@ -54,6 +54,7 @@
 
   <ItemGroup>
     <Folder Include="src\Framework\Chess\" />
+    <Folder Include="src\My Bot\models\" />
     <Folder Include="src\My Bot\tinnC\" />
   </ItemGroup>
 
