@@ -10,7 +10,7 @@ public class MyBot : IChessBot
 {
     
     public static float[] PieceValues = { 0f, 0.125f, 0.25f, 0.375f, 0.625f, 0.75f, 1f };
-    public Tinn neuralnet;
+    public TinyNeuralNetwork neuralnet;
     public static int NumInputs = 72;
     public static int NumHiddenNeurons = 1024;
 
@@ -18,12 +18,12 @@ public class MyBot : IChessBot
     {
         try
         {
-            neuralnet = Tinn.Load(BotTrainer.modelPath);
+            neuralnet = TinyNeuralNetwork.Load(BotTrainer.modelPath);
         }
         catch (Exception e)
         {
             Console.WriteLine($"{e} Model loading failed, using random model");
-            neuralnet = new Tinn(NumInputs, NumHiddenNeurons, 1);
+            neuralnet = new TinyNeuralNetwork(NumInputs, NumHiddenNeurons, 1);
         }
         
         //neuralnet.PrintWeightsAndBiases();
@@ -98,9 +98,42 @@ public class MyBot : IChessBot
         return (float)Math.Tanh(num / alpha);
     }
 
+    public float GetMoveScore(Board board, Move move, bool botIsWhite)
+    {
+        // Get float eval score for a certain move, from the bot's POV. Positive = good for bot, Negative = bad for bot
+        bool isBotsTurn = botIsWhite == board.IsWhiteToMove;
+
+        board.MakeMove(move);
+        if (board.IsInCheckmate())
+        {
+            board.UndoMove(move);
+            return 100f * (isBotsTurn ? 1f : -1f); // Make eval stupid high for checkmate so bot always picks (or ignores) checkmate move
+        }
+        float eval = neuralnet.Predict(getInputs(board))[0];
+        board.UndoMove(move);
+        return eval * (botIsWhite ? 1f : -1f);
+    }
+
     public Move Think(Board board, Timer timer)
     {
-        float[] inputs = getInputs(board);
+        bool botIsWhite = board.IsWhiteToMove;
+        Move bestMove = Move.NullMove;
+        float bestScore = -2f;
+        foreach (Move move in board.GetLegalMoves())
+        {
+            float moveScore = GetMoveScore(board, move, botIsWhite);
+            Console.WriteLine($"{move} score: {moveScore}");
+            if (moveScore > bestScore)
+            {
+                bestMove = move;
+                if (bestScore == 100f)
+                {
+                    Console.WriteLine("ayo checkmate lmfao");
+                    break;
+                }
+            }
+        }
+        /*float[] inputs = getInputs(board);
         var nnOut = neuralnet.Predict(inputs);
         foreach (float item in inputs)
         {
@@ -109,7 +142,10 @@ public class MyBot : IChessBot
         Console.WriteLine();
         Console.WriteLine(nnOut[0].ToString());
         Console.WriteLine();
-        Move[] moves = board.GetLegalMoves();
-        return moves[0];
+        Move[] moves = board.GetLegalMoves();*/
+
+        return bestMove;
     }
+
+   
 }

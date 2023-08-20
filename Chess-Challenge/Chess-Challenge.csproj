@@ -7,7 +7,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-    <StartupObject>Chess_Challenge.src.My_Bot.BotTrainer</StartupObject>
+    <StartupObject>ChessChallenge.Application.Program</StartupObject>
     <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
 
@@ -55,7 +55,6 @@
   <ItemGroup>
     <Folder Include="src\Framework\Chess\" />
     <Folder Include="src\My Bot\models\" />
-    <Folder Include="src\My Bot\tinnC\" />
   </ItemGroup>
 
   <ItemGroup>
