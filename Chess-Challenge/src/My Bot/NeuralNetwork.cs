@@ -8,10 +8,13 @@ using System.Threading.Tasks;
 
 public class NeuralNetwork
 {
+    private float[] hiddenLayer;
     private float[,] hiddenWeights;
     private float[] hiddenBiases;
+
     private float[,] outWeights;
     private float[] outBiases;
+    private float[] outputLayer;
 
     private Random random;
     private int inputCount;
@@ -26,6 +29,7 @@ public class NeuralNetwork
 
         random = new Random();
 
+        hiddenLayer = new float[hiddenCount];
         hiddenWeights = new float[hiddenCount, inputCount];
         hiddenBiases = new float[hiddenCount];
         outWeights = new float[outputCount, hiddenCount];
@@ -53,7 +57,7 @@ public class NeuralNetwork
         for (int b = 0; b < batchSize; b++)
         {
             float[] input = inputBatch[b];
-            float[] hiddenLayer = new float[hiddenCount];
+            hiddenLayer = new float[hiddenCount];
             outputs[b] = new float[outputCount];
 
             // Calculate hidden layer
@@ -113,6 +117,14 @@ public class NeuralNetwork
     {
         float sumError = actual.Zip(expected, (a, e) => (a - e) * (a - e)).Sum();
         return sumError / actual.Length;
+    }
+
+    private static float[][] MakeMatrix(int rows, int cols)
+    {
+        float[][] matrix = new float[rows][];
+        for (int r = 0; r < matrix.Length; ++r)
+            matrix[r] = new float[cols];
+        return matrix;
     }
 }
 
