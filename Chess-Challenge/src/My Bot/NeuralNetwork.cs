@@ -8,6 +8,10 @@ using System.Threading.Tasks;
 
 public class NeuralNetwork
 {
+    private int inputCount;
+    private int hiddenCount;
+    private int outputCount;
+
     private float[] hiddenLayer;
     private float[,] hiddenWeights;
     private float[] hiddenBiases;
@@ -17,23 +21,31 @@ public class NeuralNetwork
     private float[] outputLayer;
 
     private Random random;
-    private int inputCount;
-    private int hiddenCount;
-    private int outputCount;
 
-    public NeuralNetwork(int inputCount, int hiddenCount, int outputCount)
+    public NeuralNetwork(int inputCount, int outputCount, float[,] hiddenWeights, float[] hiddenBiases, float[,] outWeights, float[] outBiases, int seed = default)
+        :this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
+        this.hiddenWeights = hiddenWeights;
+        this.hiddenBiases = hiddenBiases;
+        this.outWeights = outWeights;
+        this.outBiases = outBiases;
+    }
+
+    public NeuralNetwork(int inputCount, int hiddenCount, int outputCount, int seed = default)
+    {
+        if (seed == default) random = new Random();
+        else random = new Random(seed);
+
         this.inputCount = inputCount;
         this.hiddenCount = hiddenCount;
         this.outputCount = outputCount;
-
-        random = new Random();
 
         hiddenLayer = new float[hiddenCount];
         hiddenWeights = new float[hiddenCount, inputCount];
         hiddenBiases = new float[hiddenCount];
         outWeights = new float[outputCount, hiddenCount];
         outBiases = new float[outputCount];
+        outputLayer = new float[outputCount];
 
         // initialize weights and biases
         for (int i = 0; i < hiddenCount; i++)
