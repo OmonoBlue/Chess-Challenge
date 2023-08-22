@@ -64,7 +64,8 @@ public class NeuralNetwork
                 {
                     sum += input[i] * hiddenWeights[h, i];
                 }
-                hiddenLayer[h] = ActivationFunction(sum + hiddenBiases[h]);
+                // ReLU activation for hidden layer
+                hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
             }
 
             // Calculate output layer
@@ -75,7 +76,8 @@ public class NeuralNetwork
                 {
                     sum += hiddenLayer[h] * outWeights[o, h];
                 }
-                outputs[b][o] = ActivationFunction(sum + outBiases[o]);
+                // Tanh activation for outputs
+                outputs[b][o] = TanhActivation(sum + outBiases[o]);
             }
         }
         return outputs;
@@ -86,14 +88,31 @@ public class NeuralNetwork
         return PropogateForward(new float[][] { input })[0];
     }
 
-    private static float ActivationFunction(float value)
+    private static float ReLUActivation(float value)
     {
         return value > 0f ? value : 0f;
     }
 
-    private static float ActivationFunctionPartialDerivative(float value)
+    private static float ReLUActivationDerivative(float value)
     {
         return value > 0f ? value : 0f;
+    }
+
+    private static float TanhActivation(float value)
+    {
+        return (float)Math.Tanh(value);
+    }
+
+    private static float TanhActivationDerivative(float value)
+    {
+        double tanh = Math.Tanh(value);
+        return (float)(1-(tanh * tanh));
+    }
+
+    private static float MeanSquaredError(float[] expected, float[] actual)
+    {
+        float sumError = actual.Zip(expected, (a, e) => (a - e) * (a - e)).Sum();
+        return sumError / actual.Length;
     }
 }
 
