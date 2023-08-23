@@ -133,6 +133,130 @@ public class NeuralNetwork
         return outputLayer;
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="trainingData">Array of training input-output pairs</param>
+    /// <param name="maxEpochs">Number of epochs to train over training data</param>
+    /// <param name="learningRate">Learning rate</param>
+    /// <param name="momentum">Amount the learning rate changes</param>
+    /// <returns></returns>
+    private void Train((float[], float[])[] trainingData, int maxEpochs, float learningRate, float momentum)
+    {
+        // train using back-prop
+        // back-prop specific arrays
+        float[][] hoGrads = MakeMatrix(hiddenCount, outputCount); // hidden-to-output weight gradients
+        float[] obGrads = new float[outputCount];                   // output bias gradients
+
+        float[][] ihGrads = MakeMatrix(inputCount, hiddenCount);  // input-to-hidden weight gradients
+        float[] hbGrads = new float[hiddenCount];                   // hidden bias gradients
+
+        float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
+        float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
+
+        // back-prop momentum specific arrays 
+        float[][] ihPrevWeightsDelta = MakeMatrix(inputCount, hiddenCount);
+        float[] hPrevBiasesDelta = new float[hiddenCount];
+        float[][] hoPrevWeightsDelta = MakeMatrix(hiddenCount, outputCount);
+        float[] oPrevBiasesDelta = new float[outputCount];
+
+        int epoch = 0;
+        float[] inputValues = new float[inputCount]; // inputs
+        float[] targetOutput = new float[outputCount]; // target values
+        float[] actualOutput = new float[outputCount]; // actual output values
+        float derivative = 0.0f;
+        float errorSignal = 0.0f;
+
+        int[] sequence = Enumerable.Range(0, trainingData.Length).ToArray();
+
+        while (epoch < maxEpochs)
+        {
+            ++epoch;
+            Shuffle<int>(random, sequence);
+            foreach (int s in sequence) { 
+                inputValues = trainingData[s].Item1;
+                targetOutput = trainingData[s].Item2;
+                actualOutput = PropogateForward(inputValues);
+
+                // 1. compute output node signals
+                for (int o =  0; o < outputCount; ++o)
+                {
+                    errorSignal = targetOutput[o] - actualOutput[o];
+                    derivative = TanhActivationDerivative(actualOutput[o]);
+                    oSignals[o] = errorSignal * derivative;
+                }
+
+                // 2. compute hidden-output weight gradients using output signals
+                for (int h = 0; h < hiddenCount; ++h)
+                    for (int o = 0; o < outputCount; ++o)
+                    {
+                        hoGrads[h][o] = oSignals[o] * hiddenLayer[h];
+                        // 2b. compute output bias gradients using output signals
+                        obGrads[o] = oSignals[o] * 1;
+                    }
+                // 3. hidden node signals
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    derivative = ReLUActivationDerivative(hiddenLayer[h]);
+                    float sum = 0f;
+                    for (int o = 0; o <= outputCount; ++o)
+                        sum += oSignals[o] * hiddenOutputWeights[h,o];
+                    hSignals[h] = derivative * sum;
+                }
+
+                // 4. input-hidden weight gradients
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    for (int i = 0; i < inputCount; ++i)
+                        ihGrads[i][h] = hSignals[h] * inputValues[i];
+
+                    hbGrads[h] = hSignals[h] * 1; // dummy 1.0 input
+                }
+
+                // update input-to-hidden weights
+                for (int i = 0; i < inputCount; ++i)
+                {
+                    for (int j = 0; j < hiddenCount; ++j)
+                    {
+                        float delta = ihGrads[i][j] * learningRate;
+                        inputHiddenWeights[i,j] += delta; // would be -= if (o-t)
+                        inputHiddenWeights[i,j] += ihPrevWeightsDelta[i][j] * momentum;
+                        ihPrevWeightsDelta[i][j] = delta; // save for next time
+                    }
+                }
+
+                // update hidden biases
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    float delta = hbGrads[h] * learningRate;
+                    hiddenBiases[h] += delta;
+                    hiddenBiases[h] += hPrevBiasesDelta[h] * momentum;
+                    hPrevBiasesDelta[h] = delta;
+                }
+
+                // update hidden-to-output weights
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    for (int o = 0; o < outputCount; ++o)
+                    {
+                        float delta = hoGrads[h][o] * learningRate;
+                        hiddenOutputWeights[h,o] += delta;
+                        hiddenOutputWeights[h,o] += hoPrevWeightsDelta[h][o] * momentum;
+                        hoPrevWeightsDelta[h][o] = delta;
+                    }
+                }
+
+                // update output node biases
+                for (int o = 0; o < outputCount; ++o)
+                {
+                    float delta = obGrads[o] * learningRate;
+                    outputBiases[o] += delta;
+                    outputBiases[o] += oPrevBiasesDelta[o] * momentum;
+                    oPrevBiasesDelta[o] = delta;
+                }
+            }
+        }
+    }
     private static float ReLUActivation(float value)
     {
         return value > 0f ? value : 0f;
@@ -166,6 +290,18 @@ public class NeuralNetwork
         for (int r = 0; r < matrix.Length; ++r)
             matrix[r] = new float[cols];
         return matrix;
+    }
+
+    private static void Shuffle<T>(Random rng, T[] array)
+    {
+        int n = array.Length;
+        while (n > 1)
+        {
+            int k = rng.Next(n--);
+            T temp = array[n];
+            array[n] = array[k];
+            array[k] = temp;
+        }
     }
 }
 
