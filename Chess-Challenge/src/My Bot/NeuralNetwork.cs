@@ -12,12 +12,13 @@ public class NeuralNetwork
     private int hiddenCount;
     private int outputCount;
 
+    private float[] inputLayer;
     private float[] hiddenLayer;
-    private float[,] hiddenWeights;
+    private float[,] inputHiddenWeights;
     private float[] hiddenBiases;
 
-    private float[,] outWeights;
-    private float[] outBiases;
+    private float[,] hiddenOutputWeights;
+    private float[] outputBiases;
     private float[] outputLayer;
 
     private Random random;
@@ -25,10 +26,10 @@ public class NeuralNetwork
     public NeuralNetwork(int inputCount, int outputCount, float[,] hiddenWeights, float[] hiddenBiases, float[,] outWeights, float[] outBiases, int seed = default)
         :this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
-        this.hiddenWeights = hiddenWeights;
+        this.inputHiddenWeights = hiddenWeights;
         this.hiddenBiases = hiddenBiases;
-        this.outWeights = outWeights;
-        this.outBiases = outBiases;
+        this.hiddenOutputWeights = outWeights;
+        this.outputBiases = outBiases;
     }
 
     public NeuralNetwork(int inputCount, int hiddenCount, int outputCount, int seed = default)
@@ -40,11 +41,12 @@ public class NeuralNetwork
         this.hiddenCount = hiddenCount;
         this.outputCount = outputCount;
 
+        inputLayer = new float[inputCount];
         hiddenLayer = new float[hiddenCount];
-        hiddenWeights = new float[hiddenCount, inputCount];
+        inputHiddenWeights = new float[hiddenCount, inputCount];
         hiddenBiases = new float[hiddenCount];
-        outWeights = new float[outputCount, hiddenCount];
-        outBiases = new float[outputCount];
+        hiddenOutputWeights = new float[outputCount, hiddenCount];
+        outputBiases = new float[outputCount];
         outputLayer = new float[outputCount];
 
         // initialize weights and biases
@@ -52,12 +54,12 @@ public class NeuralNetwork
         {
             for (int j = 0; j < inputCount; j++)
             {
-                hiddenWeights[i, j] = (float)random.NextDouble() - 0.5f;
+                inputHiddenWeights[i, j] = (float)random.NextDouble() - 0.5f;
             }
 
             for (int k = 0; k < outputCount; k++)
             {
-                outWeights[k, i] = (float)random.NextDouble() - 0.5f;
+                hiddenOutputWeights[k, i] = (float)random.NextDouble() - 0.5f;
             }
         }
     }
@@ -68,7 +70,7 @@ public class NeuralNetwork
         float[][] outputs = new float[batchSize][];
         for (int b = 0; b < batchSize; b++)
         {
-            float[] input = inputBatch[b];
+            inputLayer = inputBatch[b];
             hiddenLayer = new float[hiddenCount];
             outputs[b] = new float[outputCount];
 
@@ -78,7 +80,7 @@ public class NeuralNetwork
                 float sum = 0f;
                 for (int i = 0; i < inputCount; i++)
                 {
-                    sum += input[i] * hiddenWeights[h, i];
+                    sum += inputLayer[i] * inputHiddenWeights[h, i];
                 }
                 // ReLU activation for hidden layer
                 hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
@@ -90,10 +92,10 @@ public class NeuralNetwork
                 float sum = 0f;
                 for (int h = 0; h < hiddenCount; h++)
                 {
-                    sum += hiddenLayer[h] * outWeights[o, h];
+                    sum += hiddenLayer[h] * hiddenOutputWeights[o, h];
                 }
                 // Tanh activation for outputs
-                outputs[b][o] = TanhActivation(sum + outBiases[o]);
+                outputs[b][o] = TanhActivation(sum + outputBiases[o]);
             }
         }
         return outputs;
@@ -101,7 +103,34 @@ public class NeuralNetwork
 
     private float[] PropogateForward(float[] input)
     {
-        return PropogateForward(new float[][] { input })[0];
+        inputLayer = input;
+        hiddenLayer = new float[hiddenCount];
+        outputLayer = new float[outputCount];
+
+        // Calculate hidden layer
+        for (int h = 0; h < hiddenCount; h++)
+        {
+            float sum = 0f;
+            for (int i = 0; i < inputCount; i++)
+            {
+                sum += inputLayer[i] * inputHiddenWeights[h, i];
+            }
+            // ReLU activation for hidden layer
+            hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
+        }
+
+        // Calculate output layer
+        for (int o = 0; o < outputCount; o++)
+        {
+            float sum = 0f;
+            for (int h = 0; h < hiddenCount; h++)
+            {
+                sum += hiddenLayer[h] * hiddenOutputWeights[o, h];
+            }
+            // Tanh activation for outputs
+            outputLayer[o] = TanhActivation(sum + outputBiases[o]);
+        }
+        return outputLayer;
     }
 
     private static float ReLUActivation(float value)
