@@ -27,9 +27,14 @@ namespace Chess_Challenge.src.My_Bot
 
         private static string[,] fenEvalArray;
         private static Random random = new Random();
+        private const int numToLoad = 10000;
         public static void Main(string[] args)
         {
-            TinyNeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, random.Next());
+            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
+            LoadCSVToArray(trainingPath, numToLoad);
+            (float[], float[])[] data = Enumerable.Range(0, numToLoad).Select(pair => GetRandomFENEvalPair()).Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { evalStr_to_float(pair.Item2) })).ToArray();
+            neuralNet.Train(data, 128, 0.1f, 0.9f);
+            /*TinyNeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, random.Next());
 
             TrainNetwork(neuralNet, trainingPath, 0.05f, 1024, 0.999f, 10000);
 
@@ -41,8 +46,9 @@ namespace Chess_Challenge.src.My_Bot
 
             TestModel(neuralNet, 20);
             Console.WriteLine("Press anything");
-            Console.ReadKey();
+            Console.ReadKey();*/
         }
+
 
         public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
         {
@@ -79,6 +85,7 @@ namespace Chess_Challenge.src.My_Bot
                 rate *= anneal;
             }
         }
+
         public static void TestModel(int numTests = 10, string testModelPath = modelPath, string testPath = testDataPath)
         {
             Console.WriteLine("Loading model...");
@@ -111,14 +118,21 @@ namespace Chess_Challenge.src.My_Bot
             Console.WriteLine($"Average Error: {totalError / numTests}");
         }
 
-        public static void LoadCSVToArray(string path)
+        public static void LoadCSVToArray(string path, int amount = -1)
         {
             var records = new List<FenEvaluation>();
 
             using (var reader = new StreamReader(path))
             using (var csv = new CsvReader(reader, new CsvConfiguration(System.Globalization.CultureInfo.InvariantCulture)))
             {
-                records = csv.GetRecords<FenEvaluation>().ToList();
+                if (amount > 0) {
+                    records = csv.GetRecords<FenEvaluation>().Take(amount).ToList();
+                }
+                else
+                {
+                    records = csv.GetRecords<FenEvaluation>().ToList();
+                }
+
             }
 
             fenEvalArray = new string[records.Count, 2];

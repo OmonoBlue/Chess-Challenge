@@ -14,16 +14,16 @@ public class NeuralNetwork
 
     private float[] inputLayer;
     private float[] hiddenLayer;
-    private float[,] inputHiddenWeights;
+    private float[][] inputHiddenWeights;
     private float[] hiddenBiases;
 
-    private float[,] hiddenOutputWeights;
+    private float[][] hiddenOutputWeights;
     private float[] outputBiases;
     private float[] outputLayer;
 
     private Random random;
 
-    public NeuralNetwork(int inputCount, int outputCount, float[,] hiddenWeights, float[] hiddenBiases, float[,] outWeights, float[] outBiases, int seed = default)
+    public NeuralNetwork(int inputCount, int outputCount, float[][] hiddenWeights, float[] hiddenBiases, float[][] outWeights, float[] outBiases, int seed = default)
         :this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
         this.inputHiddenWeights = hiddenWeights;
@@ -43,25 +43,21 @@ public class NeuralNetwork
 
         inputLayer = new float[inputCount];
         hiddenLayer = new float[hiddenCount];
-        inputHiddenWeights = new float[hiddenCount, inputCount];
+        inputHiddenWeights = MakeMatrix(inputCount, hiddenCount);
         hiddenBiases = new float[hiddenCount];
-        hiddenOutputWeights = new float[outputCount, hiddenCount];
+        hiddenOutputWeights = MakeMatrix(hiddenCount, outputCount);
         outputBiases = new float[outputCount];
         outputLayer = new float[outputCount];
 
         // initialize weights and biases
-        for (int i = 0; i < hiddenCount; i++)
-        {
-            for (int j = 0; j < inputCount; j++)
-            {
-                inputHiddenWeights[i, j] = (float)random.NextDouble() - 0.5f;
-            }
+        for (int i = 0; i < inputCount; i++)
+            for (int h = 0; h < hiddenCount; h++)
+                inputHiddenWeights[i][h] = (float)random.NextDouble() - 0.5f;
 
-            for (int k = 0; k < outputCount; k++)
-            {
-                hiddenOutputWeights[k, i] = (float)random.NextDouble() - 0.5f;
-            }
-        }
+        for (int o = 0; o < outputCount; o++)
+            for (int h = 0; h < hiddenCount; h++)
+                hiddenOutputWeights[h][o] = (float)random.NextDouble() - 0.5f;
+
     }
 
     private float[][] PropogateForward(float[][] inputBatch)
@@ -80,7 +76,7 @@ public class NeuralNetwork
                 float sum = 0f;
                 for (int i = 0; i < inputCount; i++)
                 {
-                    sum += inputLayer[i] * inputHiddenWeights[h, i];
+                    sum += inputLayer[i] * inputHiddenWeights[i][h];
                 }
                 // ReLU activation for hidden layer
                 hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
@@ -92,7 +88,7 @@ public class NeuralNetwork
                 float sum = 0f;
                 for (int h = 0; h < hiddenCount; h++)
                 {
-                    sum += hiddenLayer[h] * hiddenOutputWeights[o, h];
+                    sum += hiddenLayer[h] * hiddenOutputWeights[h][o];
                 }
                 // Tanh activation for outputs
                 outputs[b][o] = TanhActivation(sum + outputBiases[o]);
@@ -104,8 +100,8 @@ public class NeuralNetwork
     private float[] PropogateForward(float[] input)
     {
         inputLayer = input;
-        hiddenLayer = new float[hiddenCount];
-        outputLayer = new float[outputCount];
+/*        hiddenLayer = new float[hiddenCount];
+        outputLayer = new float[outputCount];*/
 
         // Calculate hidden layer
         for (int h = 0; h < hiddenCount; h++)
@@ -113,7 +109,7 @@ public class NeuralNetwork
             float sum = 0f;
             for (int i = 0; i < inputCount; i++)
             {
-                sum += inputLayer[i] * inputHiddenWeights[h, i];
+                sum += inputLayer[i] * inputHiddenWeights[i][h];
             }
             // ReLU activation for hidden layer
             hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
@@ -125,7 +121,7 @@ public class NeuralNetwork
             float sum = 0f;
             for (int h = 0; h < hiddenCount; h++)
             {
-                sum += hiddenLayer[h] * hiddenOutputWeights[o, h];
+                sum += hiddenLayer[h] * hiddenOutputWeights[h][o];
             }
             // Tanh activation for outputs
             outputLayer[o] = TanhActivation(sum + outputBiases[o]);
@@ -141,7 +137,7 @@ public class NeuralNetwork
     /// <param name="learningRate">Learning rate</param>
     /// <param name="momentum">Amount the learning rate changes</param>
     /// <returns></returns>
-    private void Train((float[], float[])[] trainingData, int maxEpochs, float learningRate, float momentum)
+    public void Train((float[], float[])[] trainingData, int maxEpochs, float learningRate, float momentum)
     {
         // train using back-prop
         // back-prop specific arrays
@@ -164,19 +160,32 @@ public class NeuralNetwork
         float[] inputValues = new float[inputCount]; // inputs
         float[] targetOutput = new float[outputCount]; // target values
         float[] actualOutput = new float[outputCount]; // actual output values
+        float[][] allOutputs = MakeMatrix(trainingData.Length, outputCount);
         float derivative = 0.0f;
         float errorSignal = 0.0f;
 
         int[] sequence = Enumerable.Range(0, trainingData.Length).ToArray();
 
+        int errInterval = 1; // interval to check error
+
         while (epoch < maxEpochs)
         {
             ++epoch;
+            if (epoch % errInterval == 0 && epoch < maxEpochs)
+            {
+                float trainErr = MeanSquaredError(trainingData.Select(e => e.Item1).ToArray(), allOutputs);
+                Console.WriteLine("epoch = " + epoch + "  error = " +
+                  trainErr.ToString("F4"));
+                //Console.ReadLine();
+            }
+
             Shuffle<int>(random, sequence);
             foreach (int s in sequence) { 
                 inputValues = trainingData[s].Item1;
                 targetOutput = trainingData[s].Item2;
+
                 actualOutput = PropogateForward(inputValues);
+                allOutputs[s] = actualOutput;
 
                 // 1. compute output node signals
                 for (int o =  0; o < outputCount; ++o)
@@ -199,8 +208,8 @@ public class NeuralNetwork
                 {
                     derivative = ReLUActivationDerivative(hiddenLayer[h]);
                     float sum = 0f;
-                    for (int o = 0; o <= outputCount; ++o)
-                        sum += oSignals[o] * hiddenOutputWeights[h,o];
+                    for (int o = 0; o < outputCount; ++o)
+                        sum += oSignals[o] * hiddenOutputWeights[h][o];
                     hSignals[h] = derivative * sum;
                 }
 
@@ -216,12 +225,12 @@ public class NeuralNetwork
                 // update input-to-hidden weights
                 for (int i = 0; i < inputCount; ++i)
                 {
-                    for (int j = 0; j < hiddenCount; ++j)
+                    for (int h = 0; h < hiddenCount; ++h)
                     {
-                        float delta = ihGrads[i][j] * learningRate;
-                        inputHiddenWeights[i,j] += delta; // would be -= if (o-t)
-                        inputHiddenWeights[i,j] += ihPrevWeightsDelta[i][j] * momentum;
-                        ihPrevWeightsDelta[i][j] = delta; // save for next time
+                        float delta = ihGrads[i][h] * learningRate;
+                        inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
+                        inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
+                        ihPrevWeightsDelta[i][h] = delta; // save for next time
                     }
                 }
 
@@ -240,8 +249,8 @@ public class NeuralNetwork
                     for (int o = 0; o < outputCount; ++o)
                     {
                         float delta = hoGrads[h][o] * learningRate;
-                        hiddenOutputWeights[h,o] += delta;
-                        hiddenOutputWeights[h,o] += hoPrevWeightsDelta[h][o] * momentum;
+                        hiddenOutputWeights[h][o] += delta;
+                        hiddenOutputWeights[h][o] += hoPrevWeightsDelta[h][o] * momentum;
                         hoPrevWeightsDelta[h][o] = delta;
                     }
                 }
@@ -276,6 +285,12 @@ public class NeuralNetwork
     {
         double tanh = Math.Tanh(value);
         return (float)(1-(tanh * tanh));
+    }
+
+    private static float MeanSquaredError(float[][] expected, float[][] actual)
+    {
+        float sumErrors = Enumerable.Range(0, actual.Length).Select(x => MeanSquaredError(expected[x], actual[x])).Sum();
+        return sumErrors / actual.Length;
     }
 
     private static float MeanSquaredError(float[] expected, float[] actual)
