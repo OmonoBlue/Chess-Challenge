@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -52,15 +54,15 @@ public class NeuralNetwork
         // initialize weights and biases
         for (int i = 0; i < inputCount; i++)
             for (int h = 0; h < hiddenCount; h++)
-                inputHiddenWeights[i][h] = (float)random.NextDouble() - 0.5f;
+                inputHiddenWeights[i][h] = (float)random.NextDouble()*0.2f - 0.1f;
 
         for (int o = 0; o < outputCount; o++)
             for (int h = 0; h < hiddenCount; h++)
-                hiddenOutputWeights[h][o] = (float)random.NextDouble() - 0.5f;
+                hiddenOutputWeights[h][o] = (float)random.NextDouble()*0.2f - 0.1f;
 
     }
 
-    private float[][] PropogateForward(float[][] inputBatch)
+    public float[][] PropogateForward(float[][] inputBatch)
     {
         int batchSize = inputBatch.GetLength(0);
         float[][] outputs = new float[batchSize][];
@@ -97,11 +99,11 @@ public class NeuralNetwork
         return outputs;
     }
 
-    private float[] PropogateForward(float[] input)
+    public float[] PropogateForward(float[] input)
     {
         inputLayer = input;
-/*        hiddenLayer = new float[hiddenCount];
-        outputLayer = new float[outputCount];*/
+        hiddenLayer = new float[hiddenCount];
+        outputLayer = new float[outputCount];
 
         // Calculate hidden layer
         for (int h = 0; h < hiddenCount; h++)
@@ -164,8 +166,6 @@ public class NeuralNetwork
         float derivative = 0.0f;
         float errorSignal = 0.0f;
 
-        int[] sequence = Enumerable.Range(0, trainingData.Length).ToArray();
-
         int errInterval = 1; // interval to check error
 
         while (epoch < maxEpochs)
@@ -173,17 +173,17 @@ public class NeuralNetwork
             ++epoch;
             if (epoch % errInterval == 0 && epoch < maxEpochs)
             {
-                float trainErr = MeanSquaredError(trainingData.Select(e => e.Item1).ToArray(), allOutputs);
+                /*trainingData.Select(e => e.Item2).ToList().ForEach(p => Console.WriteLine(p[0]));*/
+                float trainErr = AggregateMeanSquaredError(trainingData.Select(e => e.Item2).ToArray(), allOutputs)[0];
                 Console.WriteLine("epoch = " + epoch + "  error = " +
                   trainErr.ToString("F4"));
                 //Console.ReadLine();
             }
 
-            Shuffle<int>(random, sequence);
-            foreach (int s in sequence) { 
+            Shuffle<(float[], float[])> (random, trainingData);
+            for (int s = 0; s < trainingData.Length; ++s) { 
                 inputValues = trainingData[s].Item1;
                 targetOutput = trainingData[s].Item2;
-
                 actualOutput = PropogateForward(inputValues);
                 allOutputs[s] = actualOutput;
 
@@ -193,6 +193,7 @@ public class NeuralNetwork
                     errorSignal = targetOutput[o] - actualOutput[o];
                     derivative = TanhActivationDerivative(actualOutput[o]);
                     oSignals[o] = errorSignal * derivative;
+                   /* Console.WriteLine($"Target: {targetOutput[o]} Actual: {actualOutput[o]} Error: {errorSignal}");*/
                 }
 
                 // 2. compute hidden-output weight gradients using output signals
@@ -287,10 +288,22 @@ public class NeuralNetwork
         return (float)(1-(tanh * tanh));
     }
 
-    private static float MeanSquaredError(float[][] expected, float[][] actual)
+    /// <summary>
+    /// Element-wise MeanSquaredError between lists of expected and actual vectors.
+    /// </summary>
+    /// <param name="expected"></param>
+    /// <param name="actual"></param>
+    /// <returns>List of Mean Squared error for each output node.</returns>
+    private static float[] AggregateMeanSquaredError(float[][] expected, float[][] actual)
     {
-        float sumErrors = Enumerable.Range(0, actual.Length).Select(x => MeanSquaredError(expected[x], actual[x])).Sum();
-        return sumErrors / actual.Length;
+        
+        float[][] squaredErrors = actual.Zip(expected, (Xl, Yl) => Xl.Zip(Yl, (x, y) => (x - y) * (x - y)).ToArray()).ToArray();
+        int n = expected.Count();
+        int m = squaredErrors[0].Count();
+        float[] sumSquaredErrors = Enumerable.Range(0, m)
+            .Select(j => squaredErrors.Sum(sublist => sublist[j] / n))
+            .ToArray();
+        return sumSquaredErrors;
     }
 
     private static float MeanSquaredError(float[] expected, float[] actual)
@@ -317,6 +330,94 @@ public class NeuralNetwork
             array[n] = array[k];
             array[k] = temp;
         }
+    }
+
+    /// <summary>
+    /// Loads a pre-trained neural network from a `*.tinn` file.
+    /// </summary>
+    /// <param name="path">An absolute or a relative path to the `*.tinn` file.</param>
+    /// <param name="seed">A seed for random generator to produce predictable results.</param>
+    /// <returns>An instance of a pre-trained <see cref="TinyNeuralNetwork"/>.</returns>
+    public static NeuralNetwork Load(string path, int seed)
+    {
+        using var reader = new StreamReader(path);
+        var metaData = ReadLine();
+        var counts = metaData.Split(' ').Select(int.Parse).ToList();
+        var inputCount = counts[0];
+        var hiddenCount = counts[1];
+        var outputCount = counts[2];
+
+        float[][] ihWeights = MakeMatrix(inputCount, hiddenCount);
+        float[] hiddenBiases = new float[hiddenCount];
+        float[][] hoWeights = MakeMatrix(hiddenCount, outputCount);
+        float[] outBiases = new float[outputCount];
+
+        hiddenBiases = ReadLine().Split(' ').Select(float.Parse).ToArray();
+        for (var i = 0; i < inputCount; i++)
+        {
+            ihWeights[i] = ReadLine().Split(' ').Select(float.Parse).ToArray();
+        }
+        outBiases = ReadLine().Split(' ').Select(float.Parse).ToArray();
+        for (var h = 0; h < hiddenCount; h++)
+        {
+            hoWeights[h] = ReadLine().Split(' ').Select(float.Parse).ToArray();
+        }
+
+        return new NeuralNetwork(inputCount, outputCount, ihWeights, hiddenBiases, hoWeights, outBiases, seed);
+
+        string ReadLine()
+        {
+            return reader.ReadLine() ?? throw new ArgumentException($"Corrupted file '{path ?? ""}', missing data.");
+        }
+    }
+    /// <summary>
+    /// Saves a trained neural network to a file.
+    /// </summary>
+    /// <param name="path">An absolute or a relative path to the neural network file.</param>
+    public void Save(string path, bool backup = false)
+    {
+        if (path == null) throw new ArgumentNullException("path");
+        if (backup && File.Exists(path))
+        {
+            string directory = Path.GetDirectoryName(path);
+            if (directory == null) throw new DirectoryNotFoundException("path"); 
+            string extension = Path.GetExtension(path);
+            string filenameWithoutExtension = Path.GetFileNameWithoutExtension(path);
+            string newFilename = $"{filenameWithoutExtension}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}{extension}";
+            string newFilepath = Path.Combine(directory, newFilename);
+
+            File.Move(path, newFilepath);
+        }
+        using var writer = new FormattingStreamWriter(path, CultureInfo.InvariantCulture);
+        writer.WriteLine($"{inputCount} {hiddenCount} {outputCount}");
+
+        // Write Hidden Layer Biases
+        writer.WriteLine(String.Join(' ', hiddenBiases));
+        // Write Hidden Layer Weights (1 line per hidden neuron)
+        foreach (var inputHiddenWeight in inputHiddenWeights)
+        {
+            writer.WriteLine(String.Join(' ', inputHiddenWeight));
+        }
+        // Write Output Layer Biases
+        writer.WriteLine(String.Join(' ', outputBiases));
+        // Write Output Layer Weights (1 line per output neuron)
+        foreach (var hiddenOutputWeight in hiddenOutputWeights)
+        {
+            writer.WriteLine(String.Join(' ', hiddenOutputWeight));
+        }
+    }
+
+    private class FormattingStreamWriter : StreamWriter
+    {
+        private readonly IFormatProvider _formatProvider;
+
+        public FormattingStreamWriter(string path, IFormatProvider formatProvider)
+            : base(path)
+        {
+            _formatProvider = formatProvider;
+        }
+
+        public override IFormatProvider FormatProvider => _formatProvider;
     }
 }
 
