@@ -338,7 +338,7 @@ public class NeuralNetwork
     /// <param name="path">An absolute or a relative path to the `*.tinn` file.</param>
     /// <param name="seed">A seed for random generator to produce predictable results.</param>
     /// <returns>An instance of a pre-trained <see cref="TinyNeuralNetwork"/>.</returns>
-    public static NeuralNetwork Load(string path, int seed)
+    public static NeuralNetwork Load(string path, int seed = default)
     {
         using var reader = new StreamReader(path);
         var metaData = ReadLine();

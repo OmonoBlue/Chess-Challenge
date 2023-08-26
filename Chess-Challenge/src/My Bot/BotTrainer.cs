@@ -30,10 +30,25 @@ namespace Chess_Challenge.src.My_Bot
         private const int numToLoad = 10000;
         public static void Main(string[] args)
         {
-            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
-            LoadCSVToArray(trainingPath, numToLoad);
-            (float[], float[])[] data = Enumerable.Range(0, numToLoad).Select(pair => GetRandomFENEvalPair()).Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { evalStr_to_float(pair.Item2) })).ToArray();
-            neuralNet.Train(data, 128, 0.1f, 0.9f);
+            NeuralNetwork neuralNet = NeuralNetwork.Load(modelPath);
+/*            TrainMyNetwork(neuralNet, trainingPath, numToLoad, 128);
+            Console.WriteLine("Saving model...");*/
+            neuralNet.Save(modelPath, true);
+            return;
+            var randomPair = GetRandomFENEvalPair();
+            ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
+            float[] testinput = MyBot.getInputs(board);
+            float testtarget = evalStr_to_float(randomPair.Item2);
+            float prediction = neuralNet.PropogateForward(testinput)[0];
+            float error = (testtarget - prediction) * (testtarget - prediction);
+/*            totalError += error;*/
+        
+            Console.WriteLine(board.CreateDiagram(true, false));
+            Console.WriteLine($"Random FEN: {randomPair.Item1}, Eval: {randomPair.Item2}");
+            Console.WriteLine($"Target Eval: {testtarget}");
+            Console.WriteLine($"Bot's Eval: {prediction}");
+            Console.WriteLine($"Error: {error}");
+            Console.WriteLine();
             /*TinyNeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, random.Next());
 
             TrainNetwork(neuralNet, trainingPath, 0.05f, 1024, 0.999f, 10000);
@@ -44,11 +59,20 @@ namespace Chess_Challenge.src.My_Bot
             Console.WriteLine("Loading testing dataset...");
             LoadCSVToArray(trainingPath);
 
-            TestModel(neuralNet, 20);
+            TestModel(neuralNet, 20);*/
             Console.WriteLine("Press anything");
-            Console.ReadKey();*/
+            Console.ReadKey();
+            Console.ReadKey();
         }
 
+        public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int iterations = 128, float learnRate = 0.01f, float momentum = 0.9f)
+        {
+            Console.WriteLine("Loading dataset...");
+            LoadCSVToArray(datasetPath, numToLoad);
+            (float[], float[])[] data = Enumerable.Range(0, numToLoad).Select(pair => GetRandomFENEvalPair()).Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { evalStr_to_float(pair.Item2) })).ToArray();
+            Console.WriteLine("Starting training...");
+            neuralNet.Train(data, iterations, learnRate, momentum);
+        }
 
         public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
         {
