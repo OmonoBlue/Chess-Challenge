@@ -62,6 +62,11 @@ public class NeuralNetwork
 
     }
 
+    public float[] Predict(float[] input)
+    {
+        return PropogateForward(input);
+    }
+
     public float[][] PropogateForward(float[][] inputBatch)
     {
         int batchSize = inputBatch.GetLength(0);
@@ -130,6 +135,19 @@ public class NeuralNetwork
         }
         return outputLayer;
     }
+
+    private float[] BatchError((float[], float[])[] trainingData)
+    {
+        List<float[]> exceptedOutputs = new List<float[]>();
+        List<float[]> actualOutputs = new List<float[]>();
+        foreach ((float[] input, float[] output) in trainingData)
+        {
+            exceptedOutputs.Add(output);
+            actualOutputs.Add(PropogateForward(input));
+        }
+        return AggregateMeanSquaredError(exceptedOutputs.ToArray(), actualOutputs.ToArray());
+    }
+
 
     /// <summary>
     /// 

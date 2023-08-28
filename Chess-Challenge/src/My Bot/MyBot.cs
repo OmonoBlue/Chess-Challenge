@@ -10,7 +10,7 @@ public class MyBot : IChessBot
 {
     
     public static float[] PieceValues = { 0f, 0.125f, 0.25f, 0.375f, 0.625f, 0.75f, 1f };
-    public TinyNeuralNetwork neuralnet;
+    public NeuralNetwork neuralnet;
     public static int NumInputs = 72;
     public static int NumHiddenNeurons = 1024;
 
@@ -18,12 +18,12 @@ public class MyBot : IChessBot
     {
         try
         {
-            neuralnet = TinyNeuralNetwork.Load(BotTrainer.modelPath);
+            neuralnet = NeuralNetwork.Load(BotTrainer.modelPath);
         }
         catch (Exception e)
         {
             Console.WriteLine($"{e} Model loading failed, using random model");
-            neuralnet = new TinyNeuralNetwork(NumInputs, NumHiddenNeurons, 1);
+            neuralnet = new NeuralNetwork(NumInputs, NumHiddenNeurons, 1);
         }
         
         //neuralnet.PrintWeightsAndBiases();
