@@ -27,11 +27,11 @@ namespace Chess_Challenge.src.My_Bot
 
         private static string[,] fenEvalArray;
         private static Random random = new Random();
-        private const int numToLoad = 100000;
+        private const int numToLoad = 10000;
         public static void Main(string[] args)
         {
             NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
-            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 32, epochs: 8, learnRate: 0.01f, momentum: 0.9f);
+            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 128, epochs: 32, learnRate: 0.05f, momentum: 0.9f);
             Console.WriteLine("Saving model...");
             neuralNet.Save(modelPath, true);
 
@@ -41,8 +41,8 @@ namespace Chess_Challenge.src.My_Bot
             float testtarget = evalStr_to_float(randomPair.Item2);
             float prediction = neuralNet.PropogateForward(testinput)[0];
             float error = (testtarget - prediction) * (testtarget - prediction);
-/*            totalError += error;*/
-        
+            /*            totalError += error;*/
+
             Console.WriteLine(board.CreateDiagram(true, false));
             Console.WriteLine($"Random FEN: {randomPair.Item1}, Eval: {randomPair.Item2}");
             Console.WriteLine($"Target Eval: {testtarget}");
