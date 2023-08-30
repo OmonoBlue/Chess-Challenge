@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Numerics;
-using System.Text;
 using System.Threading.Tasks;
 
 
@@ -107,10 +105,10 @@ public class NeuralNetwork
         float[] output = new float[outputCount];
 
         // Calculate hidden layer
-        for (int h = 0; h < hiddenCount; h++)
+        for (int h = 0; h < hiddenCount; ++h)
         {
             float sum = 0f;
-            for (int i = 0; i < inputCount; i++)
+            for (int i = 0; i < inputCount; ++i)
             {
                 sum += input[i] * inputHiddenWeights[i][h];
             }
@@ -119,10 +117,10 @@ public class NeuralNetwork
         }
 
         // Calculate output layer
-        for (int o = 0; o < outputCount; o++)
+        for (int o = 0; o < outputCount; ++o)
         {
             float sum = 0f;
-            for (int h = 0; h < hiddenCount; h++)
+            for (int h = 0; h < hiddenCount; ++h)
             {
                 sum += hiddenLayer[h] * hiddenOutputWeights[h][o];
             }
@@ -153,7 +151,7 @@ public class NeuralNetwork
     /// <param name="learningRate">Learning rate</param>
     /// <param name="momentum">Amount the learning rate changes</param>
     /// <returns></returns>
-    public void Train((float[], float[])[] trainingData, int batchSize, int maxEpochs, float learningRate, float momentum)
+    public void Train((float[], float[])[] trainingData, int batchSize, int maxEpochs, float learningRate, float momentum, int maxThreads = 8)
     {
         int errInterval = 8; // interval to check error
         int numBatches = trainingData.Length / batchSize;
@@ -188,172 +186,328 @@ public class NeuralNetwork
             float[][] hoPrevWeightsDelta = MakeMatrix(hiddenCount, outputCount);
             float[] oPrevBiasesDelta = new float[outputCount];
 
-            hoGrads = MakeMatrix(hiddenCount, outputCount);
-            Array.Clear(obGrads, 0, obGrads.Length);
-            ihGrads = MakeMatrix(inputCount, hiddenCount);
-            Array.Clear(hbGrads, 0, hbGrads.Length);
-
             Shuffle<(float[], float[])> (random, trainingData);
 
             // TODO: parallel each input in batch, not each batch itself. Right now the network is only upating after completing all batches in epoch (should be updating per batch)
             Stopwatch sw = Stopwatch.StartNew();
-            Parallel.For(0, numBatches, b =>
+            for (int b = 0; b < numBatches; ++b)
             {
-                float derivative = 0.0f;
-                float errorSignal = 0.0f;
+                hoGrads = MakeMatrix(hiddenCount, outputCount);
+                Array.Clear(obGrads, 0, obGrads.Length);
+                ihGrads = MakeMatrix(inputCount, hiddenCount);
+                Array.Clear(hbGrads, 0, hbGrads.Length);
 
-                float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
-                float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
-
-                float[][] localHoGrads = MakeMatrix(hiddenCount, outputCount);
-                float[] localObGrads = new float[outputCount];
-                float[][] localIhGrads = MakeMatrix(inputCount, hiddenCount);
-                float[] localHbGrads = new float[hiddenCount];
-
-                for (int s = 0; s < batchSize; ++s)
+                Parallel.For(0, maxThreads, threadNum =>
                 {
-                    int index = b * batchSize + s;
-                    float[] inputValues = trainingData[index].Item1; // inputs
-                    float[] targetOutput = trainingData[index].Item2; // target values
-                    float[] actualOutput = PropogateForward(inputValues); // actual output values
-/*                    lock (allOutputs)
-                        allOutputs[index] = actualOutput;*/
+                    float derivative = 0.0f;
+                    float errorSignal = 0.0f;
 
-                    // 1. compute output node signals
-                    for (int o = 0; o < outputCount; ++o)
+                    float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
+                    float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
+
+                    float[][] localHoGrads = MakeMatrix(hiddenCount, outputCount);
+                    float[] localObGrads = new float[outputCount];
+                    float[][] localIhGrads = MakeMatrix(inputCount, hiddenCount);
+                    float[] localHbGrads = new float[hiddenCount];
+
+                    int localBatchSize = batchSize / maxThreads;
+                    int startIndex = threadNum * localBatchSize;
+                    if (threadNum == maxThreads - 1) localBatchSize += batchSize % maxThreads; // if last thread, do the remaining batches
+                    int endIndex = startIndex + localBatchSize;
+                    for (int s = startIndex; s < endIndex; ++s)
                     {
-                        errorSignal = targetOutput[o] - actualOutput[o];
-                        derivative = TanhActivationDerivative(actualOutput[o]);
-                        oSignals[o] = errorSignal * derivative;
-                        /* Console.WriteLine($"Target: {targetOutput[o]} Actual: {actualOutput[o]} Error: {errorSignal}");*/
-                    }
+                        int index = b * batchSize + s;
+                        float[] inputValues = trainingData[index].Item1; // inputs
+                        float[] targetOutput = trainingData[index].Item2; // target values
+                        float[] actualOutput = PropogateForward(inputValues); // actual output values
+                        /*                    lock (allOutputs)
+                                                allOutputs[index] = actualOutput;*/
 
-                    // 2. compute hidden-output weight gradients using output signals
-                    for (int o = 0; o < outputCount; ++o)
-                    {
-                        for (int h = 0; h < hiddenCount; ++h)
-                            localHoGrads[h][o] += oSignals[o] * hiddenLayer[h];
-
-                        // 2b. compute output bias gradients using output signals
-                        localObGrads[o] += oSignals[o] * 1;
-                    }
-
-                    // 3. hidden node signals
-                    for (int h = 0; h < hiddenCount; ++h)
-                    {
-                        derivative = ReLUActivationDerivative(hiddenLayer[h]);
-                        float sum = 0f;
+                        // 1. compute output node signals
                         for (int o = 0; o < outputCount; ++o)
-                            sum += oSignals[o] * hiddenOutputWeights[h][o];
-                        hSignals[h] = derivative * sum;
+                        {
+                            errorSignal = targetOutput[o] - actualOutput[o];
+                            derivative = TanhActivationDerivative(actualOutput[o]);
+                            oSignals[o] = errorSignal * derivative;
+                            /* Console.WriteLine($"Target: {targetOutput[o]} Actual: {actualOutput[o]} Error: {errorSignal}");*/
+                        }
+
+                        // 2. compute hidden-output weight gradients using output signals
+                        for (int o = 0; o < outputCount; ++o)
+                        {
+                            for (int h = 0; h < hiddenCount; ++h)
+                                localHoGrads[h][o] += oSignals[o] * hiddenLayer[h];
+
+                            // 2b. compute output bias gradients using output signals
+                            localObGrads[o] += oSignals[o] * 1;
+                        }
+
+                        // 3. hidden node signals
+                        for (int h = 0; h < hiddenCount; ++h)
+                        {
+                            derivative = ReLUActivationDerivative(hiddenLayer[h]);
+                            float sum = 0f;
+                            for (int o = 0; o < outputCount; ++o)
+                                sum += oSignals[o] * hiddenOutputWeights[h][o];
+                            hSignals[h] = derivative * sum;
+                        }
+
+                        // 4. input-hidden weight gradients
+                        for (int h = 0; h < hiddenCount; ++h)
+                        {
+                            for (int i = 0; i < inputCount; ++i)
+                                localIhGrads[i][h] += hSignals[h] * inputValues[i];
+
+                            localHbGrads[h] += hSignals[h] * 1; // dummy 1.0 input
+                        }
                     }
 
-                    // 4. input-hidden weight gradients
-                    for (int h = 0; h < hiddenCount; ++h)
+                    // Add local gradients to global gradients
+                    lock (hoGrads)
+                    {
+                        for (int i = 0; i < hiddenCount; ++i)
+                            for (int j = 0; j < outputCount; ++j)
+                                hoGrads[i][j] += localHoGrads[i][j];
+                    }
+                    lock (obGrads)
+                    {
+                        for (int o = 0; o < outputCount; ++o)
+                            obGrads[o] += localObGrads[o];
+                    }
+                    lock (ihGrads)
                     {
                         for (int i = 0; i < inputCount; ++i)
-                            localIhGrads[i][h] += hSignals[h] * inputValues[i];
-
-                        localHbGrads[h] += hSignals[h] * 1; // dummy 1.0 input
+                            for (int h = 0; h < hiddenCount; ++h)
+                                ihGrads[i][h] += localIhGrads[i][h];
                     }
-                }
-
-                // Average the local gradients across the mini-batch
+                    lock (hbGrads)
+                    {
+                        for (int h = 0; h < hiddenCount; ++h)
+                            hbGrads[h] += localHbGrads[h];
+                    }
+                });
+                // Average the global gradients actross batch size
                 for (int o = 0; o < outputCount; ++o)
                 {
-                    localObGrads[o] /= batchSize;
+                    obGrads[o] /= batchSize;
                     for (int h = 0; h < hiddenCount; ++h)
-                        localHoGrads[h][o] /= batchSize;
+                        hoGrads[h][o] /= batchSize;
                 }
                 for (int h = 0; h < hiddenCount; ++h)
                 {
-                    localHbGrads[h] /= batchSize;
+                    hbGrads[h] /= batchSize;
                     for (int i = 0; i < inputCount; ++i)
-                        localIhGrads[i][h] /= batchSize;
+                        ihGrads[i][h] /= batchSize;
                 }
 
-                // Add local gradients to global gradients
-                lock (hoGrads)
-                {
-                    for (int i = 0; i < hiddenCount; ++i)
-                        for (int j = 0; j < outputCount; ++j)
-                            hoGrads[i][j] += localHoGrads[i][j];
-                }
-                lock (obGrads)
-                {
-                    for (int o = 0; o < outputCount; ++o)
-                        obGrads[o] += localObGrads[o];
-                }
-                lock (ihGrads)
-                {
-                    for (int i = 0; i < inputCount; ++i)
-                        for (int h = 0; h < hiddenCount; ++h)
-                            ihGrads[i][h] += localIhGrads[i][h];
-                }
-                lock(hbGrads)
+                // update input-to-hidden weights
+                for (int i = 0; i < inputCount; ++i)
                 {
                     for (int h = 0; h < hiddenCount; ++h)
-                        hbGrads[h] += localHbGrads[h];
+                    {
+                        float delta = ihGrads[i][h] * learningRate;
+                        inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
+                        inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
+                        ihPrevWeightsDelta[i][h] = delta; // save for next time
+                    }
                 }
-            });
+
+                // update hidden biases
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    float delta = hbGrads[h] * learningRate;
+                    hiddenBiases[h] += delta;
+                    hiddenBiases[h] += hPrevBiasesDelta[h] * momentum;
+                    hPrevBiasesDelta[h] = delta;
+                }
+
+                // update hidden-to-output weights
+                for (int h = 0; h < hiddenCount; ++h)
+                {
+                    for (int o = 0; o < outputCount; ++o)
+                    {
+                        float delta = hoGrads[h][o] * learningRate;
+                        hiddenOutputWeights[h][o] += delta;
+                        hiddenOutputWeights[h][o] += hoPrevWeightsDelta[h][o] * momentum;
+                        hoPrevWeightsDelta[h][o] = delta;
+                    }
+                }
+
+                // update output node biases
+                for (int o = 0; o < outputCount; ++o)
+                {
+                    float delta = obGrads[o] * learningRate;
+                    outputBiases[o] += delta;
+                    outputBiases[o] += oPrevBiasesDelta[o] * momentum;
+                    oPrevBiasesDelta[o] = delta;
+                }
+            }
+
+            //Parallel.For(0, numBatches, b =>
+            //{
+            //    float derivative = 0.0f;
+            //    float errorSignal = 0.0f;
+
+            //    float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
+            //    float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
+
+            //    float[][] localHoGrads = MakeMatrix(hiddenCount, outputCount);
+            //    float[] localObGrads = new float[outputCount];
+            //    float[][] localIhGrads = MakeMatrix(inputCount, hiddenCount);
+            //    float[] localHbGrads = new float[hiddenCount];
+
+            //    for (int s = 0; s < batchSize; ++s)
+            //    {
+            //        int index = b * batchSize + s;
+            //        float[] inputValues = trainingData[index].Item1; // inputs
+            //        float[] targetOutput = trainingData[index].Item2; // target values
+            //        float[] actualOutput = PropogateForward(inputValues); // actual output values
+            //        /*                    lock (allOutputs)
+            //                                allOutputs[index] = actualOutput;*/
+
+            //        //1.compute output node signals
+
+            //        for (int o = 0; o < outputCount; ++o)
+            //        {
+            //            errorSignal = targetOutput[o] - actualOutput[o];
+            //            derivative = TanhActivationDerivative(actualOutput[o]);
+            //            oSignals[o] = errorSignal * derivative;
+            //            /* Console.WriteLine($"Target: {targetOutput[o]} Actual: {actualOutput[o]} Error: {errorSignal}");*/
+            //        }
+
+            //        //2.compute hidden - output weight gradients using output signals
+
+            //        for (int o = 0; o < outputCount; ++o)
+            //        {
+            //            for (int h = 0; h < hiddenCount; ++h)
+            //                localHoGrads[h][o] += oSignals[o] * hiddenLayer[h];
+
+            //            //2b.compute output bias gradients using output signals
+
+            //            localObGrads[o] += oSignals[o] * 1;
+            //        }
+
+            //        //3.hidden node signals
+
+            //        for (int h = 0; h < hiddenCount; ++h)
+            //        {
+            //            derivative = ReLUActivationDerivative(hiddenLayer[h]);
+            //            float sum = 0f;
+            //            for (int o = 0; o < outputCount; ++o)
+            //                sum += oSignals[o] * hiddenOutputWeights[h][o];
+            //            hSignals[h] = derivative * sum;
+            //        }
+
+            //        //4.input - hidden weight gradients
+
+            //        for (int h = 0; h < hiddenCount; ++h)
+            //        {
+            //            for (int i = 0; i < inputCount; ++i)
+            //                localIhGrads[i][h] += hSignals[h] * inputValues[i];
+
+            //            localHbGrads[h] += hSignals[h] * 1; // dummy 1.0 input
+            //        }
+            //    }
+
+            //    //Average the local gradients across the mini - batch
+
+            //    for (int o = 0; o < outputCount; ++o)
+            //    {
+            //        localObGrads[o] /= batchSize;
+            //        for (int h = 0; h < hiddenCount; ++h)
+            //            localHoGrads[h][o] /= batchSize;
+            //    }
+            //    for (int h = 0; h < hiddenCount; ++h)
+            //    {
+            //        localHbGrads[h] /= batchSize;
+            //        for (int i = 0; i < inputCount; ++i)
+            //            localIhGrads[i][h] /= batchSize;
+            //    }
+
+            //    //Add local gradients to global gradients
+
+            //    lock (hoGrads)
+            //    {
+            //        for (int i = 0; i < hiddenCount; ++i)
+            //            for (int j = 0; j < outputCount; ++j)
+            //                hoGrads[i][j] += localHoGrads[i][j];
+            //    }
+            //    lock (obGrads)
+            //    {
+            //        for (int o = 0; o < outputCount; ++o)
+            //            obGrads[o] += localObGrads[o];
+            //    }
+            //    lock (ihGrads)
+            //    {
+            //        for (int i = 0; i < inputCount; ++i)
+            //            for (int h = 0; h < hiddenCount; ++h)
+            //                ihGrads[i][h] += localIhGrads[i][h];
+            //    }
+            //    lock (hbGrads)
+            //    {
+            //        for (int h = 0; h < hiddenCount; ++h)
+            //            hbGrads[h] += localHbGrads[h];
+            //    }
+            //});
+
+            ////Average the global gradients across all batches
+            //for (int o = 0; o < outputCount; ++o)
+            //{
+            //    obGrads[o] /= numBatches;
+            //    for (int h = 0; h < hiddenCount; ++h)
+            //        hoGrads[h][o] /= numBatches;
+            //}
+            //for (int h = 0; h < hiddenCount; ++h)
+            //{
+            //    hbGrads[h] /= numBatches;
+            //    for (int i = 0; i < inputCount; ++i)
+            //        ihGrads[i][h] /= numBatches;
+            //}
+
+            //// update input-to-hidden weights
+            //for (int i = 0; i < inputCount; ++i)
+            //{
+            //    for (int h = 0; h < hiddenCount; ++h)
+            //    {
+            //        float delta = ihGrads[i][h] * learningRate;
+            //        inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
+            //        inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
+            //        ihPrevWeightsDelta[i][h] = delta; // save for next time
+            //    }
+            //}
+
+            //// update hidden biases
+            //for (int h = 0; h < hiddenCount; ++h)
+            //{
+            //    float delta = hbGrads[h] * learningRate;
+            //    hiddenBiases[h] += delta;
+            //    hiddenBiases[h] += hPrevBiasesDelta[h] * momentum;
+            //    hPrevBiasesDelta[h] = delta;
+            //}
+
+            //// update hidden-to-output weights
+            //for (int h = 0; h < hiddenCount; ++h)
+            //{
+            //    for (int o = 0; o < outputCount; ++o)
+            //    {
+            //        float delta = hoGrads[h][o] * learningRate;
+            //        hiddenOutputWeights[h][o] += delta;
+            //        hiddenOutputWeights[h][o] += hoPrevWeightsDelta[h][o] * momentum;
+            //        hoPrevWeightsDelta[h][o] = delta;
+            //    }
+            //}
+
+            //// update output node biases
+            //for (int o = 0; o < outputCount; ++o)
+            //{
+            //    float delta = obGrads[o] * learningRate;
+            //    outputBiases[o] += delta;
+            //    outputBiases[o] += oPrevBiasesDelta[o] * momentum;
+            //    oPrevBiasesDelta[o] = delta;
+            //}
             sw.Stop();
             Console.WriteLine($"{numBatches} batches completed in {sw.ElapsedMilliseconds}ms");
             totalTime += sw.ElapsedMilliseconds;
-            // Average the global gradients across all batches
-            for (int o = 0; o < outputCount; ++o)
-            {
-                obGrads[o] /= numBatches;
-                for (int h = 0; h < hiddenCount; ++h)
-                    hoGrads[h][o] /= numBatches;
-            }
-            for (int h = 0; h < hiddenCount; ++h)
-            {
-                hbGrads[h] /= numBatches;
-                for (int i = 0; i < inputCount; ++i)
-                    ihGrads[i][h] /= numBatches;
-            }
-
-            // update input-to-hidden weights
-            for (int i = 0; i < inputCount; ++i)
-            {
-                for (int h = 0; h < hiddenCount; ++h)
-                {
-                    float delta = ihGrads[i][h] * learningRate;
-                    inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
-                    inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
-                    ihPrevWeightsDelta[i][h] = delta; // save for next time
-                }
-            }
-
-            // update hidden biases
-            for (int h = 0; h < hiddenCount; ++h)
-            {
-                float delta = hbGrads[h] * learningRate;
-                hiddenBiases[h] += delta;
-                hiddenBiases[h] += hPrevBiasesDelta[h] * momentum;
-                hPrevBiasesDelta[h] = delta;
-            }
-
-            // update hidden-to-output weights
-            for (int h = 0; h < hiddenCount; ++h)
-            {
-                for (int o = 0; o < outputCount; ++o)
-                {
-                    float delta = hoGrads[h][o] * learningRate;
-                    hiddenOutputWeights[h][o] += delta;
-                    hiddenOutputWeights[h][o] += hoPrevWeightsDelta[h][o] * momentum;
-                    hoPrevWeightsDelta[h][o] = delta;
-                }
-            }
-
-            // update output node biases
-            for (int o = 0; o < outputCount; ++o)
-            {
-                float delta = obGrads[o] * learningRate;
-                outputBiases[o] += delta;
-                outputBiases[o] += oPrevBiasesDelta[o] * momentum;
-                oPrevBiasesDelta[o] = delta;
-            }
         }
         Console.WriteLine($"Average batch proccessing time: {totalTime / maxEpochs}ms");
     }

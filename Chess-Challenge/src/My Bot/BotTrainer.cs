@@ -31,9 +31,9 @@ namespace Chess_Challenge.src.My_Bot
         public static void Main(string[] args)
         {
             NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, 1);
-            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 256, epochs: 32, learnRate: 0.05f, momentum: 0.9f);
-            Console.WriteLine("Saving model...");
-            neuralNet.Save(modelPath, true);
+            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 64, epochs: 32, learnRate: 0.05f, momentum: 0.9f, numThreads: 8);
+            //Console.WriteLine("Saving model...");
+            //neuralNet.Save(modelPath, true);
 
             var randomPair = GetRandomFENEvalPair();
             ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
@@ -65,13 +65,13 @@ namespace Chess_Challenge.src.My_Bot
             Console.ReadKey();
         }
 
-        public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f)
+        public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Loading dataset...");
             LoadCSVToArray(datasetPath, numDatapoints);
             (float[], float[])[] data = Enumerable.Range(0, numDatapoints).Select(pair => GetRandomFENEvalPair()).Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { evalStr_to_float(pair.Item2) })).ToArray();
             Console.WriteLine("Starting training...");
-            neuralNet.Train(data, batchSize, epochs, learnRate, momentum);
+            neuralNet.Train(data, batchSize, epochs, learnRate, momentum, numThreads);
         }
 
         public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
