@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.IO;
 using CsvHelper.Configuration;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Runtime.InteropServices;
 
 namespace Chess_Challenge.src.My_Bot
 {
@@ -21,6 +22,10 @@ namespace Chess_Challenge.src.My_Bot
 
     public class BotTrainer
     {
+        [DllImport("NNMethods.dll", EntryPoint = "test", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int test(int val);
+
+
         const string trainingPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\chessData.csv";
         const string testDataPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\tactic_evals.csv";
         public const string modelPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\models\\savedmodel.nn";
@@ -35,11 +40,20 @@ namespace Chess_Challenge.src.My_Bot
             //Console.WriteLine("Saving model...");
             //neuralNet.Save(modelPath, true);
 
+            LoadCSVToArray(trainingPath, numToLoad);
             var randomPair = GetRandomFENEvalPair();
             ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
             float[] testinput = MyBot.getInputs(board);
             float testtarget = evalStr_to_float(randomPair.Item2);
-            float prediction = neuralNet.PropogateForward(testinput)[0];
+            float prediction = 0;
+            try
+            {
+                prediction = neuralNet.PropogateForward(testinput)[0];
+            } catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+                
             float error = (testtarget - prediction) * (testtarget - prediction);
             /*            totalError += error;*/
 
@@ -65,6 +79,22 @@ namespace Chess_Challenge.src.My_Bot
             Console.ReadKey();
         }
 
+        public static void TestDLL()
+        {
+            try
+            {
+                int result = test(4);
+                Console.WriteLine("Result: " + result);
+            }
+            catch (DllNotFoundException e)
+            {
+                Console.WriteLine("DLL not found: " + e.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("An error occurred: " + e.Message);
+            }
+        }
         public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Loading dataset...");

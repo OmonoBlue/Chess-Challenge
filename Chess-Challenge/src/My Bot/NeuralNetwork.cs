@@ -5,10 +5,13 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 
 public class NeuralNetwork
 {
+    [DllImport("NNMethods.dll", EntryPoint ="dotArrays", CallingConvention = CallingConvention.Cdecl)]
+    private static extern float dotArrays(float[] arr1, int arr1Size, float[] arr2, int arr2Size);
     private int inputCount;
     private int hiddenCount;
     private int outputCount;
@@ -107,13 +110,15 @@ public class NeuralNetwork
         // Calculate hidden layer
         for (int h = 0; h < hiddenCount; ++h)
         {
-            float sum = 0f;
+            //float sum = dotArrays(input, input.Length, inputHiddenWeights.Select(arr => arr[h]).ToArray(), 1);
+            float sum = 0;
             for (int i = 0; i < inputCount; ++i)
             {
                 sum += input[i] * inputHiddenWeights[i][h];
             }
-            // ReLU activation for hidden layer
-            hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
+            //ReLU activation for hidden layer
+
+           hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
         }
 
         // Calculate output layer
