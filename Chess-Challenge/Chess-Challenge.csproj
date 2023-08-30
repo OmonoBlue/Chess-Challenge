@@ -9,6 +9,8 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <StartupObject>Chess_Challenge.src.My_Bot.BotTrainer</StartupObject>
     <Configurations>Debug;Release</Configurations>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -59,6 +61,10 @@
 
   <ItemGroup>
     <None Include="..\.editorconfig" Link=".editorconfig" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NNMethods\NNMethods.vcxproj" />
   </ItemGroup>
 
 </Project>
