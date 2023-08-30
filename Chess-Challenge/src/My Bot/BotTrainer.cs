@@ -26,12 +26,12 @@ namespace Chess_Challenge.src.My_Bot
         public const string modelPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\models\\savedmodel.nn";
 
         private static string[,] fenEvalArray;
-        private static Random random = new Random();
+        private static Random random = new Random(1);
         private const int numToLoad = 10000;
         public static void Main(string[] args)
         {
-            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
-            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 128, epochs: 32, learnRate: 0.05f, momentum: 0.9f);
+            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, 1);
+            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 256, epochs: 32, learnRate: 0.05f, momentum: 0.9f);
             Console.WriteLine("Saving model...");
             neuralNet.Save(modelPath, true);
 

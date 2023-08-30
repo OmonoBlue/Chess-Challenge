@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -154,11 +155,11 @@ public class NeuralNetwork
     /// <returns></returns>
     public void Train((float[], float[])[] trainingData, int batchSize, int maxEpochs, float learningRate, float momentum)
     {
-        int errInterval = 4; // interval to check error
+        int errInterval = 8; // interval to check error
         int numBatches = trainingData.Length / batchSize;
 
-        float[][] allOutputs = MakeMatrix(trainingData.Length / batchSize * batchSize, outputCount);
-
+        //float[][] allOutputs = MakeMatrix(trainingData.Length / batchSize * batchSize, outputCount);
+        long totalTime = 0;
         int epoch = 0;
         while (epoch < maxEpochs)
         {
@@ -195,6 +196,7 @@ public class NeuralNetwork
             Shuffle<(float[], float[])> (random, trainingData);
 
             // TODO: parallel each input in batch, not each batch itself. Right now the network is only upating after completing all batches in epoch (should be updating per batch)
+            Stopwatch sw = Stopwatch.StartNew();
             Parallel.For(0, numBatches, b =>
             {
                 float derivative = 0.0f;
@@ -214,8 +216,8 @@ public class NeuralNetwork
                     float[] inputValues = trainingData[index].Item1; // inputs
                     float[] targetOutput = trainingData[index].Item2; // target values
                     float[] actualOutput = PropogateForward(inputValues); // actual output values
-                    lock (allOutputs)
-                        allOutputs[index] = actualOutput;
+/*                    lock (allOutputs)
+                        allOutputs[index] = actualOutput;*/
 
                     // 1. compute output node signals
                     for (int o = 0; o < outputCount; ++o)
@@ -294,7 +296,9 @@ public class NeuralNetwork
                         hbGrads[h] += localHbGrads[h];
                 }
             });
-
+            sw.Stop();
+            Console.WriteLine($"{numBatches} batches completed in {sw.ElapsedMilliseconds}ms");
+            totalTime += sw.ElapsedMilliseconds;
             // Average the global gradients across all batches
             for (int o = 0; o < outputCount; ++o)
             {
@@ -351,6 +355,7 @@ public class NeuralNetwork
                 oPrevBiasesDelta[o] = delta;
             }
         }
+        Console.WriteLine($"Average batch proccessing time: {totalTime / maxEpochs}ms");
     }
 
 
