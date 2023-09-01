@@ -11,14 +11,23 @@ using System.Runtime.InteropServices;
 public class NeuralNetwork
 {
     [DllImport("NNMethods.dll", EntryPoint ="dotArrays", CallingConvention = CallingConvention.Cdecl)]
-    private static extern float dotArrays(float[] arr1, int arr1Size, float[] arr2, int arr2Size);
+    private static extern float CdotArrays(float[] arr1, float[] arr2, int size);
+
+    [DllImport("NNMethods.dll", EntryPoint = "PropogateForward", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void CPropogateForward(float[] input, float[] hiddenLayer, int hiddenCount, float[][] hiddenInputWeights, float[] hiddenBiases, int outputCount, float[][] hiddenOutputWeights, float[] outputBiases, float[] output);
+
+    [DllImport("NNMethods.dll", EntryPoint = "ReLUActivation", CallingConvention = CallingConvention.Cdecl)]
+    private static extern float CReLUActivation(float x);
+    [DllImport("NNMethods.dll", EntryPoint = "TanhActivation", CallingConvention = CallingConvention.Cdecl)]
+    private static extern float CTanhActivation(float x);
+
     private int inputCount;
     private int hiddenCount;
     private int outputCount;
 
     [ThreadStatic] private static float[] hiddenLayer;
 
-    private float[][] inputHiddenWeights;
+    private float[][] hiddenInputWeights;
     private float[] hiddenBiases;
     private float[][] hiddenOutputWeights;
     private float[] outputBiases;
@@ -28,7 +37,7 @@ public class NeuralNetwork
     public NeuralNetwork(int inputCount, int outputCount, float[][] hiddenWeights, float[] hiddenBiases, float[][] outWeights, float[] outBiases, int seed = default)
         :this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
-        this.inputHiddenWeights = hiddenWeights;
+        this.hiddenInputWeights = hiddenWeights;
         this.hiddenBiases = hiddenBiases;
         this.hiddenOutputWeights = outWeights;
         this.outputBiases = outBiases;
@@ -44,7 +53,7 @@ public class NeuralNetwork
         this.outputCount = outputCount;
 
         hiddenLayer = new float[hiddenCount];
-        inputHiddenWeights = MakeMatrix(inputCount, hiddenCount);
+        hiddenInputWeights = MakeMatrix(hiddenCount, inputCount);
         hiddenBiases = new float[hiddenCount];
         hiddenOutputWeights = MakeMatrix(hiddenCount, outputCount);
         outputBiases = new float[outputCount];
@@ -52,7 +61,7 @@ public class NeuralNetwork
         // initialize weights and biases
         for (int i = 0; i < inputCount; i++)
             for (int h = 0; h < hiddenCount; h++)
-                inputHiddenWeights[i][h] = (float)random.NextDouble()*0.2f - 0.1f;
+                hiddenInputWeights[h][i] = (float)random.NextDouble()*0.2f - 0.1f;
 
         for (int o = 0; o < outputCount; o++)
             for (int h = 0; h < hiddenCount; h++)
@@ -81,7 +90,7 @@ public class NeuralNetwork
                 float sum = 0f;
                 for (int i = 0; i < inputCount; i++)
                 {
-                    sum += input[i] * inputHiddenWeights[i][h];
+                    sum += input[i] * hiddenInputWeights[h][i];
                 }
                 // ReLU activation for hidden layer
                 hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
@@ -110,13 +119,13 @@ public class NeuralNetwork
         // Calculate hidden layer
         for (int h = 0; h < hiddenCount; ++h)
         {
-            //float sum = dotArrays(input, input.Length, inputHiddenWeights.Select(arr => arr[h]).ToArray(), 1);
+            //float sum = CdotArrays(input, hiddenInputWeights[h], inputCount);
             float sum = 0;
             for (int i = 0; i < inputCount; ++i)
             {
-                sum += input[i] * inputHiddenWeights[i][h];
+                sum += input[i] * hiddenInputWeights[h][i];
             }
-            //ReLU activation for hidden layer
+            // ReLU activation for hidden layer
 
            hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
         }
@@ -224,7 +233,8 @@ public class NeuralNetwork
                         int index = b * batchSize + s;
                         float[] inputValues = trainingData[index].Item1; // inputs
                         float[] targetOutput = trainingData[index].Item2; // target values
-                        float[] actualOutput = PropogateForward(inputValues); // actual output values
+                        float[] actualOutput = PropogateForward(inputValues);
+                        // CPropogateForward(inputValues, hiddenLayer, hiddenCount, hiddenInputWeights, hiddenBiases, outputCount, hiddenOutputWeights, outputBiases, actualOutput); // actual output values
                         /*                    lock (allOutputs)
                                                 allOutputs[index] = actualOutput;*/
 
@@ -311,8 +321,8 @@ public class NeuralNetwork
                     for (int h = 0; h < hiddenCount; ++h)
                     {
                         float delta = ihGrads[i][h] * learningRate;
-                        inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
-                        inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
+                        hiddenInputWeights[h][i] += delta; // would be -= if (o-t)
+                        hiddenInputWeights[h][i] += ihPrevWeightsDelta[i][h] * momentum;
                         ihPrevWeightsDelta[i][h] = delta; // save for next time
                     }
                 }
@@ -571,6 +581,14 @@ public class NeuralNetwork
         return matrix;
     }
 
+    private static void ClearMatrix(float[][] matrix)
+    {
+        foreach (float[] row in matrix)
+        {
+            Array.Clear(row, 0, row.Length);
+        }
+    }
+
     private static void Shuffle<T>(Random rng, T[] array)
     {
         int n = array.Length;
@@ -598,15 +616,15 @@ public class NeuralNetwork
         var hiddenCount = counts[1];
         var outputCount = counts[2];
 
-        float[][] ihWeights = MakeMatrix(inputCount, hiddenCount);
+        float[][] hiWeights = MakeMatrix(hiddenCount, inputCount);
         float[] hiddenBiases = new float[hiddenCount];
         float[][] hoWeights = MakeMatrix(hiddenCount, outputCount);
         float[] outBiases = new float[outputCount];
 
         hiddenBiases = ReadLine().Split(' ').Select(float.Parse).ToArray();
-        for (var i = 0; i < inputCount; i++)
+        for (var h = 0; h < hiddenCount; h++)
         {
-            ihWeights[i] = ReadLine().Split(' ').Select(float.Parse).ToArray();
+            hiWeights[h] = ReadLine().Split(' ').Select(float.Parse).ToArray();
         }
         outBiases = ReadLine().Split(' ').Select(float.Parse).ToArray();
         for (var h = 0; h < hiddenCount; h++)
@@ -614,7 +632,7 @@ public class NeuralNetwork
             hoWeights[h] = ReadLine().Split(' ').Select(float.Parse).ToArray();
         }
 
-        return new NeuralNetwork(inputCount, outputCount, ihWeights, hiddenBiases, hoWeights, outBiases, seed);
+        return new NeuralNetwork(inputCount, outputCount, hiWeights, hiddenBiases, hoWeights, outBiases, seed);
 
         string ReadLine()
         {
@@ -645,9 +663,9 @@ public class NeuralNetwork
         // Write Hidden Layer Biases
         writer.WriteLine(String.Join(' ', hiddenBiases));
         // Write Hidden Layer Weights (1 line per hidden neuron)
-        foreach (var inputHiddenWeight in inputHiddenWeights)
+        foreach (var hiddenInputWeight in hiddenInputWeights)
         {
-            writer.WriteLine(String.Join(' ', inputHiddenWeight));
+            writer.WriteLine(String.Join(' ', hiddenInputWeight));
         }
         // Write Output Layer Biases
         writer.WriteLine(String.Join(' ', outputBiases));
