@@ -6,11 +6,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
-
+using System.Threading;
 
 public class NeuralNetwork
 {
-    [DllImport("NNMethods.dll", EntryPoint ="dotArrays", CallingConvention = CallingConvention.Cdecl)]
+    [DllImport("NNMethods.dll", EntryPoint = "dotArrays", CallingConvention = CallingConvention.Cdecl)]
     private static extern float CdotArrays(float[] arr1, float[] arr2, int size);
 
     [DllImport("NNMethods.dll", EntryPoint = "PropogateForward", CallingConvention = CallingConvention.Cdecl)]
@@ -35,7 +35,7 @@ public class NeuralNetwork
     private Random random;
 
     public NeuralNetwork(int inputCount, int outputCount, float[][] hiddenWeights, float[] hiddenBiases, float[][] outWeights, float[] outBiases, int seed = default)
-        :this(inputCount, hiddenBiases.Length, outputCount, seed)
+        : this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
         this.hiddenInputWeights = hiddenWeights;
         this.hiddenBiases = hiddenBiases;
@@ -61,11 +61,11 @@ public class NeuralNetwork
         // initialize weights and biases
         for (int i = 0; i < inputCount; i++)
             for (int h = 0; h < hiddenCount; h++)
-                hiddenInputWeights[h][i] = (float)random.NextDouble()*0.2f - 0.1f;
+                hiddenInputWeights[h][i] = (float)random.NextDouble() * 0.2f - 0.1f;
 
         for (int o = 0; o < outputCount; o++)
             for (int h = 0; h < hiddenCount; h++)
-                hiddenOutputWeights[h][o] = (float)random.NextDouble()*0.2f - 0.1f;
+                hiddenOutputWeights[h][o] = (float)random.NextDouble() * 0.2f - 0.1f;
 
     }
 
@@ -127,7 +127,7 @@ public class NeuralNetwork
             }
             // ReLU activation for hidden layer
 
-           hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
+            hiddenLayer[h] = ReLUActivation(sum + hiddenBiases[h]);
         }
 
         // Calculate output layer
@@ -170,7 +170,28 @@ public class NeuralNetwork
         int errInterval = 8; // interval to check error
         int numBatches = trainingData.Length / batchSize;
 
-        //float[][] allOutputs = MakeMatrix(trainingData.Length / batchSize * batchSize, outputCount);
+        // train using back-prop
+
+        // back-prop momentum specific arrays 
+        float[][] ihPrevWeightsDelta = MakeMatrix(inputCount, hiddenCount);
+        float[] hPrevBiasesDelta = new float[hiddenCount];
+        float[][] hoPrevWeightsDelta = MakeMatrix(hiddenCount, outputCount);
+        float[] oPrevBiasesDelta = new float[outputCount];
+
+        // back-prop specific arrays
+        float[][] hoGrads = MakeMatrix(hiddenCount, outputCount); // hidden-to-output weight gradients
+        float[] obGrads = new float[outputCount];                   // output bias gradients
+
+        float[][] ihGrads = MakeMatrix(inputCount, hiddenCount);  // input-to-hidden weight gradients
+        float[] hbGrads = new float[hiddenCount];                   // hidden bias gradients
+
+        // local gradient arrays (one index per thread)
+        float[][][] threadHoGrads = Enumerable.Range(0, maxThreads).Select(x => MakeMatrix(hiddenCount, outputCount)).ToArray(); // hidden-to-output weight gradients
+        float[][] threadObGrads = Enumerable.Range(0, maxThreads).Select(x => new float[outputCount]).ToArray();                   // output bias gradients
+
+        float[][][] threadIhGrads = Enumerable.Range(0, maxThreads).Select(x => MakeMatrix(inputCount, hiddenCount)).ToArray();  // input-to-hidden weight gradients
+        float[][] threadHbGrads = Enumerable.Range(0, maxThreads).Select(x => new float[hiddenCount]).ToArray();
+
         long totalTime = 0;
         int epoch = 0;
         while (epoch < maxEpochs)
@@ -186,43 +207,38 @@ public class NeuralNetwork
                 //Console.ReadLine();
             }
 
-            // train using back-prop
-            // back-prop specific arrays
-            float[][] hoGrads = MakeMatrix(hiddenCount, outputCount); // hidden-to-output weight gradients
-            float[] obGrads = new float[outputCount];                   // output bias gradients
+            Shuffle<(float[], float[])>(random, trainingData);
 
-            float[][] ihGrads = MakeMatrix(inputCount, hiddenCount);  // input-to-hidden weight gradients
-            float[] hbGrads = new float[hiddenCount];                   // hidden bias gradients
+            ClearMatrix(ihPrevWeightsDelta);
+            Array.Clear(hPrevBiasesDelta, 0, hiddenCount);
+            ClearMatrix(hoPrevWeightsDelta);
+            Array.Clear(oPrevBiasesDelta, 0, outputCount);
 
-            // back-prop momentum specific arrays 
-            float[][] ihPrevWeightsDelta = MakeMatrix(inputCount, hiddenCount);
-            float[] hPrevBiasesDelta = new float[hiddenCount];
-            float[][] hoPrevWeightsDelta = MakeMatrix(hiddenCount, outputCount);
-            float[] oPrevBiasesDelta = new float[outputCount];
-
-            Shuffle<(float[], float[])> (random, trainingData);
-
-            // TODO: parallel each input in batch, not each batch itself. Right now the network is only upating after completing all batches in epoch (should be updating per batch)
             Stopwatch sw = Stopwatch.StartNew();
             for (int b = 0; b < numBatches; ++b)
             {
-                hoGrads = MakeMatrix(hiddenCount, outputCount);
-                Array.Clear(obGrads, 0, obGrads.Length);
-                ihGrads = MakeMatrix(inputCount, hiddenCount);
-                Array.Clear(hbGrads, 0, hbGrads.Length);
+                ClearMatrix(hoGrads);
+                Array.Clear(obGrads, 0, outputCount);
+                ClearMatrix(ihGrads);
+                Array.Clear(hbGrads, 0, hiddenCount);
 
                 Parallel.For(0, maxThreads, threadNum =>
                 {
+                    float[][] localHoGrads = threadHoGrads[threadNum]; // hidden-to-output weight gradients
+                    float[] localObGrads = threadObGrads[threadNum];                   // output bias gradients
+                    float[][] localIhGrads = threadIhGrads[threadNum];  // input-to-hidden weight gradients
+                    float[] localHbGrads = threadHbGrads[threadNum];
+
+                    ClearMatrix(localHoGrads);
+                    Array.Clear(localObGrads, 0, outputCount);
+                    ClearMatrix(localIhGrads);
+                    Array.Clear(localHbGrads, 0, hiddenCount);
+
                     float derivative = 0.0f;
                     float errorSignal = 0.0f;
 
                     float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
                     float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
-
-                    float[][] localHoGrads = MakeMatrix(hiddenCount, outputCount);
-                    float[] localObGrads = new float[outputCount];
-                    float[][] localIhGrads = MakeMatrix(inputCount, hiddenCount);
-                    float[] localHbGrads = new float[hiddenCount];
 
                     int localBatchSize = batchSize / maxThreads;
                     int startIndex = threadNum * localBatchSize;
@@ -276,31 +292,33 @@ public class NeuralNetwork
                             localHbGrads[h] += hSignals[h] * 1; // dummy 1.0 input
                         }
                     }
-
-                    // Add local gradients to global gradients
-                    lock (hoGrads)
-                    {
-                        for (int i = 0; i < hiddenCount; ++i)
-                            for (int j = 0; j < outputCount; ++j)
-                                hoGrads[i][j] += localHoGrads[i][j];
-                    }
-                    lock (obGrads)
-                    {
-                        for (int o = 0; o < outputCount; ++o)
-                            obGrads[o] += localObGrads[o];
-                    }
-                    lock (ihGrads)
-                    {
-                        for (int i = 0; i < inputCount; ++i)
-                            for (int h = 0; h < hiddenCount; ++h)
-                                ihGrads[i][h] += localIhGrads[i][h];
-                    }
-                    lock (hbGrads)
-                    {
-                        for (int h = 0; h < hiddenCount; ++h)
-                            hbGrads[h] += localHbGrads[h];
-                    }
                 });
+
+                // Console.WriteLine($"Num Threads: {maxThreads}, Num localGrads: {localHoGrads.Values.Count}");
+                // Add each local gradient to global gradients
+                foreach (float[][] localHoGrad in threadHoGrads)
+                {
+                    for (int i = 0; i < hiddenCount; ++i)
+                        for (int j = 0; j < outputCount; ++j)
+                            hoGrads[i][j] += localHoGrad[i][j];
+                }
+                foreach (float[] localObGrad in threadObGrads)
+                {
+                    for (int o = 0; o < outputCount; ++o)
+                        obGrads[o] += localObGrad[o];
+                }
+                foreach (float[][] localIhGrad in threadIhGrads)
+                {
+                    for (int i = 0; i < inputCount; ++i)
+                        for (int h = 0; h < hiddenCount; ++h)
+                            ihGrads[i][h] += localIhGrad[i][h];
+                }
+                foreach (float[] localHbGrad in threadHbGrads)
+                {
+                    for (int h = 0; h < hiddenCount; ++h)
+                        hbGrads[h] += localHbGrad[h];
+                }
+
                 // Average the global gradients actross batch size
                 for (int o = 0; o < outputCount; ++o)
                 {
@@ -356,170 +374,9 @@ public class NeuralNetwork
                     outputBiases[o] += oPrevBiasesDelta[o] * momentum;
                     oPrevBiasesDelta[o] = delta;
                 }
+
             }
 
-            //Parallel.For(0, numBatches, b =>
-            //{
-            //    float derivative = 0.0f;
-            //    float errorSignal = 0.0f;
-
-            //    float[] oSignals = new float[outputCount];                  // local gradient output signals - gradients w/o associated input terms
-            //    float[] hSignals = new float[hiddenCount];                  // local gradient hidden node signals
-
-            //    float[][] localHoGrads = MakeMatrix(hiddenCount, outputCount);
-            //    float[] localObGrads = new float[outputCount];
-            //    float[][] localIhGrads = MakeMatrix(inputCount, hiddenCount);
-            //    float[] localHbGrads = new float[hiddenCount];
-
-            //    for (int s = 0; s < batchSize; ++s)
-            //    {
-            //        int index = b * batchSize + s;
-            //        float[] inputValues = trainingData[index].Item1; // inputs
-            //        float[] targetOutput = trainingData[index].Item2; // target values
-            //        float[] actualOutput = PropogateForward(inputValues); // actual output values
-            //        /*                    lock (allOutputs)
-            //                                allOutputs[index] = actualOutput;*/
-
-            //        //1.compute output node signals
-
-            //        for (int o = 0; o < outputCount; ++o)
-            //        {
-            //            errorSignal = targetOutput[o] - actualOutput[o];
-            //            derivative = TanhActivationDerivative(actualOutput[o]);
-            //            oSignals[o] = errorSignal * derivative;
-            //            /* Console.WriteLine($"Target: {targetOutput[o]} Actual: {actualOutput[o]} Error: {errorSignal}");*/
-            //        }
-
-            //        //2.compute hidden - output weight gradients using output signals
-
-            //        for (int o = 0; o < outputCount; ++o)
-            //        {
-            //            for (int h = 0; h < hiddenCount; ++h)
-            //                localHoGrads[h][o] += oSignals[o] * hiddenLayer[h];
-
-            //            //2b.compute output bias gradients using output signals
-
-            //            localObGrads[o] += oSignals[o] * 1;
-            //        }
-
-            //        //3.hidden node signals
-
-            //        for (int h = 0; h < hiddenCount; ++h)
-            //        {
-            //            derivative = ReLUActivationDerivative(hiddenLayer[h]);
-            //            float sum = 0f;
-            //            for (int o = 0; o < outputCount; ++o)
-            //                sum += oSignals[o] * hiddenOutputWeights[h][o];
-            //            hSignals[h] = derivative * sum;
-            //        }
-
-            //        //4.input - hidden weight gradients
-
-            //        for (int h = 0; h < hiddenCount; ++h)
-            //        {
-            //            for (int i = 0; i < inputCount; ++i)
-            //                localIhGrads[i][h] += hSignals[h] * inputValues[i];
-
-            //            localHbGrads[h] += hSignals[h] * 1; // dummy 1.0 input
-            //        }
-            //    }
-
-            //    //Average the local gradients across the mini - batch
-
-            //    for (int o = 0; o < outputCount; ++o)
-            //    {
-            //        localObGrads[o] /= batchSize;
-            //        for (int h = 0; h < hiddenCount; ++h)
-            //            localHoGrads[h][o] /= batchSize;
-            //    }
-            //    for (int h = 0; h < hiddenCount; ++h)
-            //    {
-            //        localHbGrads[h] /= batchSize;
-            //        for (int i = 0; i < inputCount; ++i)
-            //            localIhGrads[i][h] /= batchSize;
-            //    }
-
-            //    //Add local gradients to global gradients
-
-            //    lock (hoGrads)
-            //    {
-            //        for (int i = 0; i < hiddenCount; ++i)
-            //            for (int j = 0; j < outputCount; ++j)
-            //                hoGrads[i][j] += localHoGrads[i][j];
-            //    }
-            //    lock (obGrads)
-            //    {
-            //        for (int o = 0; o < outputCount; ++o)
-            //            obGrads[o] += localObGrads[o];
-            //    }
-            //    lock (ihGrads)
-            //    {
-            //        for (int i = 0; i < inputCount; ++i)
-            //            for (int h = 0; h < hiddenCount; ++h)
-            //                ihGrads[i][h] += localIhGrads[i][h];
-            //    }
-            //    lock (hbGrads)
-            //    {
-            //        for (int h = 0; h < hiddenCount; ++h)
-            //            hbGrads[h] += localHbGrads[h];
-            //    }
-            //});
-
-            ////Average the global gradients across all batches
-            //for (int o = 0; o < outputCount; ++o)
-            //{
-            //    obGrads[o] /= numBatches;
-            //    for (int h = 0; h < hiddenCount; ++h)
-            //        hoGrads[h][o] /= numBatches;
-            //}
-            //for (int h = 0; h < hiddenCount; ++h)
-            //{
-            //    hbGrads[h] /= numBatches;
-            //    for (int i = 0; i < inputCount; ++i)
-            //        ihGrads[i][h] /= numBatches;
-            //}
-
-            //// update input-to-hidden weights
-            //for (int i = 0; i < inputCount; ++i)
-            //{
-            //    for (int h = 0; h < hiddenCount; ++h)
-            //    {
-            //        float delta = ihGrads[i][h] * learningRate;
-            //        inputHiddenWeights[i][h] += delta; // would be -= if (o-t)
-            //        inputHiddenWeights[i][h] += ihPrevWeightsDelta[i][h] * momentum;
-            //        ihPrevWeightsDelta[i][h] = delta; // save for next time
-            //    }
-            //}
-
-            //// update hidden biases
-            //for (int h = 0; h < hiddenCount; ++h)
-            //{
-            //    float delta = hbGrads[h] * learningRate;
-            //    hiddenBiases[h] += delta;
-            //    hiddenBiases[h] += hPrevBiasesDelta[h] * momentum;
-            //    hPrevBiasesDelta[h] = delta;
-            //}
-
-            //// update hidden-to-output weights
-            //for (int h = 0; h < hiddenCount; ++h)
-            //{
-            //    for (int o = 0; o < outputCount; ++o)
-            //    {
-            //        float delta = hoGrads[h][o] * learningRate;
-            //        hiddenOutputWeights[h][o] += delta;
-            //        hiddenOutputWeights[h][o] += hoPrevWeightsDelta[h][o] * momentum;
-            //        hoPrevWeightsDelta[h][o] = delta;
-            //    }
-            //}
-
-            //// update output node biases
-            //for (int o = 0; o < outputCount; ++o)
-            //{
-            //    float delta = obGrads[o] * learningRate;
-            //    outputBiases[o] += delta;
-            //    outputBiases[o] += oPrevBiasesDelta[o] * momentum;
-            //    oPrevBiasesDelta[o] = delta;
-            //}
             sw.Stop();
             Console.WriteLine($"{numBatches} batches completed in {sw.ElapsedMilliseconds}ms");
             totalTime += sw.ElapsedMilliseconds;
@@ -546,7 +403,7 @@ public class NeuralNetwork
     private static float TanhActivationDerivative(float value)
     {
         double tanh = Math.Tanh(value);
-        return (float)(1-(tanh * tanh));
+        return (float)(1 - (tanh * tanh));
     }
 
     /// <summary>
@@ -557,7 +414,7 @@ public class NeuralNetwork
     /// <returns>List of Mean Squared error for each output node.</returns>
     private static float[] AggregateMeanSquaredError(float[][] expected, float[][] actual)
     {
-        
+
         float[][] squaredErrors = actual.Zip(expected, (Xl, Yl) => Xl.Zip(Yl, (x, y) => (x - y) * (x - y)).ToArray()).ToArray();
         int n = expected.Count();
         int m = squaredErrors[0].Count();
@@ -649,7 +506,7 @@ public class NeuralNetwork
         if (backup && File.Exists(path))
         {
             string directory = Path.GetDirectoryName(path);
-            if (directory == null) throw new DirectoryNotFoundException("path"); 
+            if (directory == null) throw new DirectoryNotFoundException("path");
             string extension = Path.GetExtension(path);
             string filenameWithoutExtension = Path.GetFileNameWithoutExtension(path);
             string newFilename = $"{filenameWithoutExtension}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}{extension}";

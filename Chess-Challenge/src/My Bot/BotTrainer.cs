@@ -60,11 +60,11 @@ namespace Chess_Challenge.src.My_Bot
 
         private static (string, float)[] fenEvalArray;
         private static Random random = new Random(1);
-        private const int numToLoad = -1;
+        private const int numToLoad = 10000;
         public static void Main(string[] args)
         {
             NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, 1);
-            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 64, epochs: 64, learnRate: 0.05f, momentum: 0.9f, numThreads: 8);
+            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 64, epochs: 16, learnRate: 0.05f, momentum: 0.9f, numThreads: 8);
             Console.WriteLine("Saving model...");
             neuralNet.Save(modelPath, true);
 
