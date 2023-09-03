@@ -201,7 +201,7 @@ public class NeuralNetwork
             if (epoch % errInterval == 0 && epoch < maxEpochs)
             {
                 /*trainingData.Select(e => e.Item2).ToList().ForEach(p => Console.WriteLine(p[0]));*/
-                float trainErr = BatchError(trainingData.Take(trainingData.GetLength(0)).ToArray())[0];
+                float trainErr = BatchError(trainingData.Take(Math.Min(trainingData.GetLength(0), 10000)).ToArray())[0];
                 //float trainErr = AggregateMeanSquaredError(trainingData.Select(e => e.Item2).ToArray(), allOutputs)[0];
                 Console.WriteLine($"epoch = {epoch} error = {trainErr.ToString("F4")}");
                 //Console.ReadLine();
