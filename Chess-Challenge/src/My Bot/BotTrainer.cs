@@ -16,6 +16,8 @@ using System.Text.Json.Nodes;
 using System.Text.Json;
 using CsvHelper.Configuration.Attributes;
 using System.Transactions;
+using System.Dynamic;
+using System.IO.Compression;
 
 namespace Chess_Challenge.src.My_Bot
 {
@@ -40,6 +42,7 @@ namespace Chess_Challenge.src.My_Bot
         }
     }
 
+    
     public class EvaluationConverter : DefaultTypeConverter
     {
         public override object ConvertFromString(string text, IReaderRow row, MemberMapData memberMapData)
@@ -48,26 +51,92 @@ namespace Chess_Challenge.src.My_Bot
         }
     }
 
+    public class InputOutputPair
+    {
+        [TypeConverter(typeof(BotInputConverter))]
+        public float[] Input { get; set; }
+        public float Evaluation { get; set; }
+    }
+
+    public class BotInputConverter : DefaultTypeConverter
+    {
+        private ByteArrayConverter converter = new ByteArrayConverter(ByteArrayConverterOptions.Base64);
+        
+        public override object? ConvertFromString(string text, IReaderRow row, MemberMapData memberMapData)
+        {
+            byte[] byteArray = Decompress((byte[])converter.ConvertFromString(text, row, memberMapData));
+            float[] floatArray = new float[byteArray.Length / sizeof(float)];
+            Buffer.BlockCopy(byteArray, 0, floatArray, 0, byteArray.Length);
+            return floatArray;
+        }
+
+        public override string? ConvertToString(object? value, IWriterRow row, MemberMapData memberMapData)
+        {
+            if (value.GetType() == typeof(float[]))
+            {
+                float[] floatArray = (float[])value;
+                byte[] byteArray = new byte[floatArray.Length * sizeof(float)];
+                Buffer.BlockCopy(floatArray, 0, byteArray, 0, byteArray.Length);
+                return converter.ConvertToString(Compress(byteArray), row, memberMapData);
+            }
+            return base.ConvertToString(value, row, memberMapData);
+        }
+
+        public static byte[] Compress(byte[] bytes)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                using (var gzipStream = new GZipStream(memoryStream, CompressionLevel.Optimal))
+                {
+                    gzipStream.Write(bytes, 0, bytes.Length);
+                }
+                return memoryStream.ToArray();
+            }
+        }
+
+        public static byte[] Decompress(byte[] bytes)
+        {
+            using (var memoryStream = new MemoryStream(bytes))
+            {
+
+                using (var outputStream = new MemoryStream())
+                {
+                    using (var decompressStream = new GZipStream(memoryStream, CompressionMode.Decompress))
+                    {
+                        decompressStream.CopyTo(outputStream);
+                    }
+                    return outputStream.ToArray();
+                }
+            }
+        }
+    }
+
+
     public class BotTrainer
     {
         [DllImport("NNMethods.dll", EntryPoint = "test", CallingConvention = CallingConvention.Cdecl)]
         private static extern int test(int val);
 
-
         const string trainingPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\chessData.csv";
-        const string testDataPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\tactic_evals.csv";
+        const string proccessedTrainingPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\chessData-Proccessed.csv";
+        const string testDataPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\random_evals.csv";
+        const string tacticDataPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\tactic_evals.csv";
         public const string modelPath = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\models\\savedmodel.nn";
 
         private static (string, float)[] fenEvalArray;
+        private static (float[], float[])[] trainingData;
         private static Random random = new Random(1);
-        private const int numToLoad = 10000;
+        private const int numToLoad = 5000000;
         public static void Main(string[] args)
         {
-            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1, 1);
-            TrainMyNetwork(neuralNet, trainingPath, numToLoad, batchSize: 64, epochs: 16, learnRate: 0.05f, momentum: 0.9f, numThreads: 8);
+            LoadCSVToTrainingArray(proccessedTrainingPath, numToLoad);
+
+            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
+            TrainMyNetwork(neuralNet, batchSize: 64, epochs: 16, learnRate: 0.03f, momentum: 0.9f, numThreads: 8);
             Console.WriteLine("Saving model...");
             neuralNet.Save(modelPath, true);
 
+            LoadCSVToFenEvalArray(testDataPath, 100);
             var randomPair = GetRandomFENEvalPair();
             ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
             float[] testinput = MyBot.getInputs(board);
@@ -125,47 +194,93 @@ namespace Chess_Challenge.src.My_Bot
         public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Loading dataset...");
-            LoadCSVToArray(datasetPath, numDatapoints);
+            LoadCSVToFenEvalArray(datasetPath, numDatapoints);
             Console.WriteLine("Parsing dataset...");
-            (float[], float[])[] data = fenEvalArray.Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { pair.Item2 })).ToArray();
-            Console.WriteLine("Starting training...");
-            neuralNet.Train(data, batchSize, epochs, learnRate, momentum, numThreads);
+            LoadTrainingDataFromFenEvalArray();
+            TrainMyNetwork(neuralNet, batchSize, epochs, learnRate, momentum, numThreads);
         }
 
-        public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
+        /// <summary>
+        /// Trains neural network using data in trainingData array. Assumes trainingData is already loaded
+        /// </summary>
+        /// <param name="neuralNet"></param>
+        /// <param name="batchSize"></param>
+        /// <param name="epochs"></param>
+        /// <param name="learnRate"></param>
+        /// <param name="momentum"></param>
+        /// <param name="numThreads"></param>
+        public static void TrainMyNetwork(NeuralNetwork neuralNet, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
-            // Hyper Parameters.
-            // Learning rate is annealed and thus not constant.
-            // It can be fine tuned along with the number of hidden layers.
-            // Feel free to modify the anneal rate.
-            // The number of iterations can be changed for stronger training.
+            Console.WriteLine("Starting training...");
+            neuralNet.Train(trainingData, batchSize, epochs, learnRate, momentum, numThreads);
+        }
+        //public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
+        //{
+        //    // Hyper Parameters.
+        //    // Learning rate is annealed and thus not constant.
+        //    // It can be fine tuned along with the number of hidden layers.
+        //    // Feel free to modify the anneal rate.
+        //    // The number of iterations can be changed for stronger training.
 
-            LoadCSVToArray(datasetPath);
+        //    LoadCSVToArray(datasetPath);
 
-            for (int i = 0; i < iterations; i++)
+        //    for (int i = 0; i < iterations; i++)
+        //    {
+        //        float error = 0.0f;
+        //        int skipped = 0;
+        //        for (int j = 0; j < batch; j++)
+        //        {
+        //            float[] input;
+        //            float[] target;
+        //            (string, float) currPair = GetRandomFENEvalPair();
+        //            try
+        //            {
+        //                input = MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(currPair.Item1));
+        //                target = new float[]{currPair.Item2};
+        //            } catch (Exception e)
+        //            {
+        //                Console.WriteLine($"Error {e}\ninput: {currPair}");
+        //                ++skipped;
+        //                continue;
+        //            }
+        //            error += network.Train(input, target, rate);
+        //        }
+        //        Console.WriteLine($"{i+1}/{iterations}: error {(double)error / (batch-skipped)} :: learning rate {(double)rate} {(skipped>0?$"Skipped{skipped}":"")}");
+        //        rate *= anneal;
+        //    }
+        //}
+
+        public static void LoadTrainingDataFromFenEvalArray()
+        {
+            trainingData = fenEvalArray.AsParallel().Select(pair => (MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)), new float[] { pair.Item2 })).ToArray();
+        }
+
+        public static void LoadCSVToTrainingArray(string inPath = proccessedTrainingPath, int amount = -1)
+        {
+            var records = new Queue<InputOutputPair>();
+            int rowCount = 0;
+            int skipped = 0;
+            using (var reader = new StreamReader(inPath))
+            using (var csv = new CsvReader(reader, new CsvConfiguration(System.Globalization.CultureInfo.InvariantCulture)))
             {
-                float error = 0.0f;
-                int skipped = 0;
-                for (int j = 0; j < batch; j++)
+                csv.Read();
+                csv.ReadHeader();
+                while (csv.Read()) // Read the CSV file line by line
                 {
-                    float[] input;
-                    float[] target;
-                    (string, float) currPair = GetRandomFENEvalPair();
+                    if (amount > 0 && rowCount - skipped >= amount) break;
+
                     try
                     {
-                        input = MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(currPair.Item1));
-                        target = new float[]{currPair.Item2};
-                    } catch (Exception e)
-                    {
-                        Console.WriteLine($"Error {e}\ninput: {currPair}");
-                        ++skipped;
-                        continue;
+                        records.Enqueue(csv.GetRecord<InputOutputPair>());
+                        rowCount++;
                     }
-                    error += network.Train(input, target, rate);
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error in row number {rowCount} of csv file. Total skipped: {++skipped}");
+                    }
                 }
-                Console.WriteLine($"{i+1}/{iterations}: error {(double)error / (batch-skipped)} :: learning rate {(double)rate} {(skipped>0?$"Skipped{skipped}":"")}");
-                rate *= anneal;
             }
+            trainingData = records.AsParallel().Select(record => (record.Input, new float[] { record.Evaluation })).ToArray();
         }
 
         public static void TestModel(int numTests = 10, string testModelPath = modelPath, string testPath = testDataPath)
@@ -174,7 +289,7 @@ namespace Chess_Challenge.src.My_Bot
             TinyNeuralNetwork testNet = TinyNeuralNetwork.Load(testModelPath);
 
             Console.WriteLine("Loading testing dataset...");
-            LoadCSVToArray(testPath);
+            LoadCSVToFenEvalArray(testPath);
             TestModel(testNet, numTests);
         }
 
@@ -200,25 +315,23 @@ namespace Chess_Challenge.src.My_Bot
             Console.WriteLine($"Average Error: {totalError / numTests}");
         }
 
-        public static void LoadCSVToArray(string path, int amount = -1)
+        public static void LoadCSVToFenEvalArray(string path, int amount = -1)
         {
-            var records = new List<FenEvaluation>();
-
+            var records = new Queue<FenEvaluation>();
+            int rowCount = 0;
+            int skipped = 0;
             using (var reader = new StreamReader(path))
             using (var csv = new CsvReader(reader, new CsvConfiguration(System.Globalization.CultureInfo.InvariantCulture)))
             {
                 csv.Read();
                 csv.ReadHeader();
-
-                int rowCount = 0;
-                int skipped = 0;
                 while (csv.Read()) // Read the CSV file line by line
                 {
                     if (amount > 0 && rowCount - skipped >= amount) break;
                     
                     try
                     {
-                        records.Add(csv.GetRecord<FenEvaluation>());
+                        records.Enqueue(csv.GetRecord<FenEvaluation>());
                         rowCount++;
                     }
                     catch (Exception ex)
@@ -227,12 +340,36 @@ namespace Chess_Challenge.src.My_Bot
                     }
                 }
             }
+            fenEvalArray = records.Select(record => (record.FEN, record.Evaluation)).ToArray();
+        }
 
-            fenEvalArray = new (string, float)[records.Count];
-            for (int i = 0; i < records.Count; i++)
+
+        public static void SaveTrainingCSV(string outpath, int amount = -1)
+        {
+            IEnumerable<InputOutputPair> inOutPairs = fenEvalArray.Select(pair => new InputOutputPair
             {
-                fenEvalArray[i] = (records[i].FEN, records[i].Evaluation);
+                Input = MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(pair.Item1)),
+                Evaluation = pair.Item2
+            });
+            if (amount > 0)
+            {
+                inOutPairs = inOutPairs.Take(amount);
             }
+
+            using (var writer = new StreamWriter(outpath))
+            using (var csv = new CsvWriter(writer, new CsvConfiguration(System.Globalization.CultureInfo.InvariantCulture)))
+            {
+                csv.WriteRecords(inOutPairs);
+            }
+        }
+
+        public static void ConvertToTrainingCSV(string inpath, string outpath, int amount = -1)
+        {
+            Console.WriteLine("Loading dataset...");
+            LoadCSVToFenEvalArray(inpath, amount);
+            Console.WriteLine($"Converting and writing {(amount > 1 ? amount+" ":"")}input-output pairs...");
+            SaveTrainingCSV(outpath, amount);
+            Console.WriteLine($"Done! Saved to {outpath}");
         }
 
         public static (string, float) GetRandomFENEvalPair()
