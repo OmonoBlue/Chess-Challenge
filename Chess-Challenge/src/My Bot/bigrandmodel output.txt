@@ -1,0 +1,47 @@
+Loading dataset...
+Parsing dataset...
+Starting training...
+15625 batches completed in 293843ms
+15625 batches completed in 294725ms
+15625 batches completed in 309946ms
+15625 batches completed in 315091ms
+15625 batches completed in 327577ms
+15625 batches completed in 357579ms
+15625 batches completed in 386915ms
+epoch = 8 error = 0.1312
+15625 batches completed in 355899ms
+15625 batches completed in 358958ms
+15625 batches completed in 323222ms
+15625 batches completed in 357326ms
+15625 batches completed in 343179ms
+15625 batches completed in 332685ms
+15625 batches completed in 349949ms
+15625 batches completed in 353604ms
+15625 batches completed in 335868ms
+Average batch proccessing time: 337272ms
+Saving model...
++---+---+---+---+---+---+---+---+
+|   | r |   |   |   |   | n |   | 8
++---+---+---+---+---+---+---+---+
+|   |   |   |   |   |   |   | p | 7
++---+---+---+---+---+---+---+---+
+| P | p | R |   |   |   | p | k | 6
++---+---+---+---+---+---+---+---+
+|   | B |   | P | p |   |   |   | 5
++---+---+---+---+---+---+---+---+
+| P |   |   |   | P |   |   |   | 4
++---+---+---+---+---+---+---+---+
+|   |   |   |   |   | K |   |   | 3
++---+---+---+---+---+---+---+---+
+|   |   |   |   |   |   | P | P | 2
++---+---+---+---+---+---+---+---+
+|   |   |   |   |   |   |   |   | 1
++---+---+---+---+---+---+---+---+
+  a   b   c   d   e   f   g   h
+
+Zobrist Key : 16031746040372551410
+
+Random FEN: 1r4n1/7p/PpR3pk/1B1Pp3/P3P3/5K2/6PP/8 b - - 9 36, Eval: 0.9942758
+Target Eval: 0.9942758
+Bot's Eval: 0.9825896
+Error: 0.00013656741
