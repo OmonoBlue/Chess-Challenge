@@ -399,3 +399,22 @@ FodyWeavers.xsd
 /Chess-Challenge/src/My Bot/training
 /Chess-Challenge/src/My Bot/models
 /Chess-Challenge/src/My Bot/models - TINN
+Chess-Challenge/src/My Bot/training/chessData-Proccessed.csv
+Chess-Challenge/src/My Bot/training/chessData.csv
+Chess-Challenge/src/My Bot/training/chessData.csv.zip
+Chess-Challenge/src/My Bot/training/random_evals.csv
+Chess-Challenge/src/My Bot/training/tactic_evals.csv
+Chess-Challenge/src/My Bot/training/chessData-Proccessed.csv
+Chess-Challenge/src/My Bot/training/chessData.csv
+Chess-Challenge/src/My Bot/training/chessData.csv.zip
+Chess-Challenge/src/My Bot/training/random_evals.csv
+Chess-Challenge/src/My Bot/training/tactic_evals.csv
+Chess-Challenge/src/My Bot/models - TINN/savedmodel.tinn
+Chess-Challenge/src/My Bot/models - TINN/savedmodel_2023-08-19_15-31-34-110.tinn
+Chess-Challenge/src/My Bot/models - TINN/savedmodel_2023-08-19_15-40-32-192.tinn
+Chess-Challenge/src/My Bot/models - TINN/savedmodel_2023-08-20_18-06-27-696.tinn
+Chess-Challenge/src/My Bot/models/bigrandomodel.nn
+Chess-Challenge/src/My Bot/models/savedmodel.nn
+Chess-Challenge/src/My Bot/models/savedmodel_2023-09-03_00-09-38-654.nn
+Chess-Challenge/src/My Bot/models/savedmodel_2023-09-03_00-12-22-505.nn
+Chess-Challenge/src/My Bot/models/savedmodel_2023-09-03_18-09-08-513.nn

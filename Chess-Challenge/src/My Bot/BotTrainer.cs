@@ -129,6 +129,9 @@ namespace Chess_Challenge.src.My_Bot
         private const int numToLoad = 5000000;
         public static void Main(string[] args)
         {
+            Console.WriteLine("Converting...");
+            ConvertToTrainingCSV(trainingPath, proccessedTrainingPath);
+            return;
             LoadCSVToTrainingArray(proccessedTrainingPath, numToLoad);
 
             NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
@@ -175,22 +178,7 @@ namespace Chess_Challenge.src.My_Bot
             Console.ReadKey();
         }
 
-        public static void TestDLL()
-        {
-            try
-            {
-                int result = test(4);
-                Console.WriteLine("Result: " + result);
-            }
-            catch (DllNotFoundException e)
-            {
-                Console.WriteLine("DLL not found: " + e.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("An error occurred: " + e.Message);
-            }
-        }
+
         public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Loading dataset...");
@@ -214,41 +202,6 @@ namespace Chess_Challenge.src.My_Bot
             Console.WriteLine("Starting training...");
             neuralNet.Train(trainingData, batchSize, epochs, learnRate, momentum, numThreads);
         }
-        //public static void TrainNetwork(TinyNeuralNetwork network, string datasetPath = trainingPath, float rate = 0.1f, int iterations = 512, float anneal = 0.999f, int batch = 100)
-        //{
-        //    // Hyper Parameters.
-        //    // Learning rate is annealed and thus not constant.
-        //    // It can be fine tuned along with the number of hidden layers.
-        //    // Feel free to modify the anneal rate.
-        //    // The number of iterations can be changed for stronger training.
-
-        //    LoadCSVToArray(datasetPath);
-
-        //    for (int i = 0; i < iterations; i++)
-        //    {
-        //        float error = 0.0f;
-        //        int skipped = 0;
-        //        for (int j = 0; j < batch; j++)
-        //        {
-        //            float[] input;
-        //            float[] target;
-        //            (string, float) currPair = GetRandomFENEvalPair();
-        //            try
-        //            {
-        //                input = MyBot.getInputs(ChessChallenge.API.Board.CreateBoardFromFEN(currPair.Item1));
-        //                target = new float[]{currPair.Item2};
-        //            } catch (Exception e)
-        //            {
-        //                Console.WriteLine($"Error {e}\ninput: {currPair}");
-        //                ++skipped;
-        //                continue;
-        //            }
-        //            error += network.Train(input, target, rate);
-        //        }
-        //        Console.WriteLine($"{i+1}/{iterations}: error {(double)error / (batch-skipped)} :: learning rate {(double)rate} {(skipped>0?$"Skipped{skipped}":"")}");
-        //        rate *= anneal;
-        //    }
-        //}
 
         public static void LoadTrainingDataFromFenEvalArray()
         {
@@ -281,38 +234,6 @@ namespace Chess_Challenge.src.My_Bot
                 }
             }
             trainingData = records.AsParallel().Select(record => (record.Input, new float[] { record.Evaluation })).ToArray();
-        }
-
-        public static void TestModel(int numTests = 10, string testModelPath = modelPath, string testPath = testDataPath)
-        {
-            Console.WriteLine("Loading model...");
-            TinyNeuralNetwork testNet = TinyNeuralNetwork.Load(testModelPath);
-
-            Console.WriteLine("Loading testing dataset...");
-            LoadCSVToFenEvalArray(testPath);
-            TestModel(testNet, numTests);
-        }
-
-        public static void TestModel(TinyNeuralNetwork testNet, int numTests = 10) {
-            float totalError = 0.0f;
-            for (int i = 0; i < numTests; i++)
-            {
-                var randomPair = GetRandomFENEvalPair();
-                ChessChallenge.API.Board board = ChessChallenge.API.Board.CreateBoardFromFEN(randomPair.Item1);
-                float[] testinput = MyBot.getInputs(board);
-                float testtarget = randomPair.Item2;
-                float prediction = testNet.Predict(testinput)[0];
-                float error = testNet.GetTotalError(new float[] { testtarget });
-                totalError += error;
-
-                Console.Write(board.CreateDiagram(true, false));
-                Console.WriteLine($"Random FEN: {randomPair.Item1}, Eval: {randomPair.Item2}");
-                Console.WriteLine($"Target Eval: {testtarget}");
-                Console.WriteLine($"Bot's Eval: {prediction}");
-                Console.WriteLine($"Error: {error}");
-                Console.WriteLine();
-            }
-            Console.WriteLine($"Average Error: {totalError / numTests}");
         }
 
         public static void LoadCSVToFenEvalArray(string path, int amount = -1)
