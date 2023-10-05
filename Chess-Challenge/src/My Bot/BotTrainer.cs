@@ -134,7 +134,7 @@ namespace Chess_Challenge.src.My_Bot
             return;
             LoadCSVToTrainingArray(proccessedTrainingPath, numToLoad);
 
-            NeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
+            MyNeuralNetwork neuralNet = new(MyBot.NumInputs, MyBot.NumHiddenNeurons, 1);
             TrainMyNetwork(neuralNet, batchSize: 64, epochs: 16, learnRate: 0.03f, momentum: 0.9f, numThreads: 8);
             Console.WriteLine("Saving model...");
             neuralNet.Save(modelPath, true);
@@ -179,7 +179,7 @@ namespace Chess_Challenge.src.My_Bot
         }
 
 
-        public static void TrainMyNetwork(NeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
+        public static void TrainMyNetwork(MyNeuralNetwork neuralNet, string datasetPath = trainingPath, int numDatapoints = 1000, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Loading dataset...");
             LoadCSVToFenEvalArray(datasetPath, numDatapoints);
@@ -197,7 +197,7 @@ namespace Chess_Challenge.src.My_Bot
         /// <param name="learnRate"></param>
         /// <param name="momentum"></param>
         /// <param name="numThreads"></param>
-        public static void TrainMyNetwork(NeuralNetwork neuralNet, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
+        public static void TrainMyNetwork(MyNeuralNetwork neuralNet, int batchSize = 32, int epochs = 12, float learnRate = 0.01f, float momentum = 0.9f, int numThreads = 8)
         {
             Console.WriteLine("Starting training...");
             neuralNet.Train(trainingData, batchSize, epochs, learnRate, momentum, numThreads);

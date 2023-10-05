@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-public class NeuralNetwork
+public class MyNeuralNetwork
 {
     [DllImport("NNMethods.dll", EntryPoint = "dotArrays", CallingConvention = CallingConvention.Cdecl)]
     private static extern float CdotArrays(float[] arr1, float[] arr2, int size);
@@ -34,7 +34,7 @@ public class NeuralNetwork
 
     private Random random;
 
-    public NeuralNetwork(int inputCount, int outputCount, float[][] hiddenWeights, float[] hiddenBiases, float[][] outWeights, float[] outBiases, int seed = default)
+    public MyNeuralNetwork(int inputCount, int outputCount, float[][] hiddenWeights, float[] hiddenBiases, float[][] outWeights, float[] outBiases, int seed = default)
         : this(inputCount, hiddenBiases.Length, outputCount, seed)
     {
         this.hiddenInputWeights = hiddenWeights;
@@ -43,7 +43,7 @@ public class NeuralNetwork
         this.outputBiases = outBiases;
     }
 
-    public NeuralNetwork(int inputCount, int hiddenCount, int outputCount, int seed = default)
+    public MyNeuralNetwork(int inputCount, int hiddenCount, int outputCount, int seed = default)
     {
         if (seed == default) random = new Random();
         else random = new Random(seed);
@@ -464,7 +464,7 @@ public class NeuralNetwork
     /// <param name="path">An absolute or a relative path to the `*.tinn` file.</param>
     /// <param name="seed">A seed for random generator to produce predictable results.</param>
     /// <returns>An instance of a pre-trained <see cref="TinyNeuralNetwork"/>.</returns>
-    public static NeuralNetwork Load(string path, int seed = default)
+    public static MyNeuralNetwork Load(string path, int seed = default)
     {
         using var reader = new StreamReader(path);
         var metaData = ReadLine();
@@ -489,7 +489,7 @@ public class NeuralNetwork
             hoWeights[h] = ReadLine().Split(' ').Select(float.Parse).ToArray();
         }
 
-        return new NeuralNetwork(inputCount, outputCount, hiWeights, hiddenBiases, hoWeights, outBiases, seed);
+        return new MyNeuralNetwork(inputCount, outputCount, hiWeights, hiddenBiases, hoWeights, outBiases, seed);
 
         string ReadLine()
         {

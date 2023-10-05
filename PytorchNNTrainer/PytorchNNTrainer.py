@@ -1,6 +1,7 @@
 import os
 import base64
 import gzip
+import binascii
 import struct
 from tqdm import tqdm
 import torch
@@ -12,8 +13,10 @@ from torch.utils.data import Dataset, DataLoader
 
 DATASET_PATH = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\training\\chessData-Proccessed.csv"
 MODEL_FOLDER = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\Models\\"
+STRING_MODEL_PATH = "D:\\Documents\\_Programming\\C# Projects\\Chess-Challenge\\Chess-Challenge\\src\\My Bot\\Models\\string_model.txt"
 MODEL_PREFIX = "torch_model"
-ROW_LIMIT = 750000
+# ROW_LIMIT = 750000
+ROW_LIMIT = 10
 
 
 # Step 1: Preprocess dataset
@@ -86,6 +89,11 @@ def train_neural_network(dataset_file_path, save_folder, save_prefix, save_inter
     latest_epoch = load_latest_model(model, save_folder, save_prefix) or 0  # Load the latest model
     print(f"Latest epoch: {latest_epoch}")
     
+    print(f"Hex string len: {len(convert_weights_biases_to_hex_string(model))}")
+    print(f"Base 64 len: {len(convert_weights_biases_to_base64_string(model))}")
+    print(f"String len: {len(convert_weights_biases_to_string(model))}")
+    
+    return
     criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=learn_rate)
 
@@ -127,6 +135,54 @@ def load_latest_model(model, folder, file_prefix):
     latest_file = os.path.join(folder, f"{file_prefix}_epoch_{latest_epoch}.pth")
     model.load_state_dict(torch.load(latest_file))
     return latest_epoch  # Return the latest epoch number
+
+
+def convert_weights_biases_to_hex_string(model):
+    model = model.to("cpu")
+    weights_biases = [
+        model.fc1.weight.data.numpy().flatten(),
+        model.fc1.bias.data.numpy().flatten(),
+        model.fc2.weight.data.numpy().flatten(),
+        model.fc2.bias.data.numpy().flatten(),
+        model.fc3.weight.data.numpy().flatten(),
+        model.fc3.bias.data.numpy().flatten(),
+    ]
+    wb_hex = ';'.join(''.join(binascii.hexlify(struct.pack('f', x)).decode('utf-8') for x in wb) for wb in weights_biases)
+    with open(STRING_MODEL_PATH, "w") as file:
+        file.write(wb_hex)
+    return wb_hex
+
+def convert_weights_biases_to_base64_string(model):
+    model = model.to("cpu")
+    weights_biases = [
+        model.fc1.weight.data.numpy().flatten(),
+        model.fc1.bias.data.numpy().flatten(),
+        model.fc2.weight.data.numpy().flatten(),
+        model.fc2.bias.data.numpy().flatten(),
+        model.fc3.weight.data.numpy().flatten(),
+        model.fc3.bias.data.numpy().flatten(),
+    ]
+    wb_str = ';'.join(','.join(map(str, wb.flatten())) for wb in weights_biases)
+    wb_bytes = wb_str.encode('utf-8')  # Convert string to bytes
+    wb_base64 = base64.b64encode(wb_bytes)  # Encode bytes to base64
+    return wb_base64.decode('utf-8')  # Convert base64 bytes back to string
+
+
+def convert_weights_biases_to_string(model):
+    model = model.to("cpu")
+    # Assuming `model` is an instance of the NeuralNet class
+    # We're also assuming that the weights and biases are stored as numpy arrays in the model
+    weights_biases = [
+        model.fc1.weight.data.numpy().flatten(),
+        model.fc1.bias.data.numpy().flatten(),
+        model.fc2.weight.data.numpy().flatten(),
+        model.fc2.bias.data.numpy().flatten(),
+        model.fc3.weight.data.numpy().flatten(),
+        model.fc3.bias.data.numpy().flatten(),
+    ]
+    # Convert all values to strings and join them
+    wb_str = ';'.join(','.join(map(str, wb.flatten())) for wb in weights_biases)
+    return wb_str
 
 
 # Example usage
